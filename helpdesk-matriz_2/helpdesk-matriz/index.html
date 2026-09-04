@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Help Desk Matriz — Entrar</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div class="auth-wrapper">
+    <div class="auth-card">
+      <div class="auth-marca">
+        <img src="assets/logo-comm.png" alt="Comm" class="logo-principal" />
+        <img src="assets/logo-ti.png" alt="Tecnologia da Informação" class="logo-setor" />
+      </div>
+      <p class="subtitulo">Gestão de atividades do time de Help Desk</p>
+
+      <div class="auth-tabs">
+        <div class="auth-tab ativo" data-alvo="form-login">Entrar</div>
+        <div class="auth-tab" data-alvo="form-cadastro">Criar conta</div>
+      </div>
+
+      <!-- LOGIN -->
+      <form id="form-login" class="auth-form ativo">
+        <div class="campo">
+          <label for="login-email">E-mail</label>
+          <input type="email" id="login-email" required autocomplete="email" />
+        </div>
+        <div class="campo">
+          <label for="login-senha">Senha</label>
+          <input type="password" id="login-senha" required autocomplete="current-password" />
+        </div>
+        <p class="erro-msg" id="login-erro"></p>
+        <button type="submit" class="botao-primario botao-bloco">Entrar</button>
+      </form>
+
+      <!-- CADASTRO -->
+      <form id="form-cadastro" class="auth-form">
+        <div class="campo">
+          <label for="cad-nome">Nome completo</label>
+          <input type="text" id="cad-nome" required autocomplete="name" />
+        </div>
+        <div class="campo">
+          <label for="cad-email">E-mail</label>
+          <input type="email" id="cad-email" required autocomplete="email" />
+        </div>
+        <div class="campo">
+          <label for="cad-senha">Senha</label>
+          <input type="password" id="cad-senha" required minlength="6" autocomplete="new-password" />
+        </div>
+        <p class="erro-msg" id="cadastro-erro"></p>
+        <button type="submit" class="botao-primario botao-bloco">Criar conta</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/index.js"></script>
+</body>
+</html>

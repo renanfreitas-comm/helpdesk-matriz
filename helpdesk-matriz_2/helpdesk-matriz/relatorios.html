@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relatórios diários — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="logo">
+      <img src="assets/logo-comm.png" alt="Comm" class="logo-principal" />
+      <span class="selo-setor">Tecnologia da Informação</span>
+    </div>
+    <nav class="app-nav">
+      <a class="nav-link" href="dashboard.html">Dashboard</a>
+      <a class="nav-link" href="chamados.html">Chamados</a>
+      <a class="nav-link" href="relatorios.html">Relatórios</a>
+      <a class="nav-link" href="maquinas.html">Máquinas</a>
+      <a class="nav-link" href="estoque.html">Estoque</a>
+      <a class="nav-link" id="nav-link-usuarios" href="usuarios.html" style="display:none">Usuários</a>
+      <a class="nav-link" id="nav-link-supervisao" href="supervisao.html" style="display:none">Supervisão</a>
+    </nav>
+    <div class="app-user">
+      <span class="nome" id="nav-nome">—</span>
+      <span class="badge" id="nav-papel"></span>
+      <button class="botao-secundario" id="nav-sair">Sair</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <h1>Meus relatórios diários</h1>
+      <button class="botao-primario" id="btn-novo-relatorio">+ Novo relatório do dia</button>
+    </div>
+    <p class="texto-suave" style="margin-top:-14px;margin-bottom:20px;">
+      Registre um resumo do que você fez a cada dia. O supervisor acompanha os relatórios de todo o time na página Supervisão.
+    </p>
+
+    <div class="filtros">
+      <input type="date" id="filtro-data" />
+      <button class="botao-secundario" id="btn-limpar-filtro">Limpar filtro</button>
+    </div>
+
+    <div id="lista-relatorios">
+      <p class="carregando">Carregando relatórios...</p>
+    </div>
+  </main>
+
+  <!-- Modal: novo/editar relatório -->
+  <div class="modal-fundo" id="modal-relatorio">
+    <div class="modal">
+      <h2 id="modal-relatorio-titulo">Novo relatório do dia</h2>
+      <form class="modal-form" id="form-relatorio">
+        <input type="hidden" id="relatorio-id" />
+
+        <div class="campo">
+          <label for="relatorio-data">Data</label>
+          <input type="date" id="relatorio-data" required />
+        </div>
+
+        <div class="campo">
+          <label for="relatorio-resumo">O que você fez hoje?</label>
+          <textarea id="relatorio-resumo" rows="4" required placeholder="Ex: Atendi 5 chamados, formatei 2 máquinas do setor financeiro, troquei o switch da sala de reuniões..."></textarea>
+        </div>
+
+        <div class="campo">
+          <label>Chamados atendidos hoje (opcional)</label>
+          <div id="lista-chamados-checkbox" class="tabela-wrapper" style="max-height:180px; overflow-y:auto; padding:8px 14px;">
+            <p class="texto-suave">Carregando seus chamados...</p>
+          </div>
+        </div>
+
+        <p class="erro-msg" id="relatorio-erro"></p>
+
+        <div class="modal-acoes">
+          <button type="button" class="botao-secundario" id="btn-cancelar-relatorio">Cancelar</button>
+          <button type="submit" class="botao-primario" id="btn-salvar-relatorio">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/relatorios.js"></script>
+</body>
+</html>
