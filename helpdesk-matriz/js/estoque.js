@@ -1,5 +1,5 @@
 // ==========================================================================
-// LÓGICA DA TELA DE ESTOQUE (itens + movimentações de entrada/saída)
+// LÓGICA DA TELA DE ESTOQUE (controle de equipamentos: chegada, configuração e saída)
 // ==========================================================================
 import { db } from "./firebase-config.js";
 import { protegerPagina } from "./auth.js";
@@ -11,84 +11,122 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
+  getDocs,
   orderBy,
   query,
-  where,
-  serverTimestamp,
-  increment
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 let usuarioAtual = null;
 let perfilAtual = null;
+let listaUsuarios = [];
 let listaItens = [];
 let itemIdAtual = null;
-let pararObservacaoMov = null;
 
 const tabelaBody = document.getElementById("tabela-estoque");
 const modal = document.getElementById("modal-item");
 const form = document.getElementById("form-item");
-const blocoMov = document.getElementById("bloco-movimentacao");
+const selectTecnico = document.getElementById("item-tecnico");
+
+const ROTULOS_PRIORIDADE = { baixa: "Baixa", media: "Média", alta: "Alta" };
+const ROTULOS_SITUACAO = {
+  recebido: "Recebido",
+  em_configuracao: "Em configuração",
+  aguardando_peca: "Aguardando peça",
+  concluido: "Concluído",
+  entregue: "Entregue"
+};
+const CLASSES_SITUACAO = {
+  recebido: "badge-situacao-recebido",
+  em_configuracao: "badge-situacao-em_configuracao",
+  aguardando_peca: "badge-situacao-aguardando_peca",
+  concluido: "badge-situacao-concluido",
+  entregue: "badge-situacao-entregue"
+};
 
 protegerPagina((user, perfil) => {
   usuarioAtual = user;
   perfilAtual = perfil;
   montarNav(perfil);
-  observarItens();
+  carregarUsuarios().then(() => {
+    observarItens();
+  });
 });
 
+// -------------------- Carregar usuários (para o select de técnico) --------------------
+async function carregarUsuarios() {
+  const snap = await getDocs(collection(db, "usuarios"));
+  listaUsuarios = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+
+  const opcoes = listaUsuarios
+    .map((u) => `<option value="${u.uid}">${escaparHTML(u.nome)}</option>`)
+    .join("");
+
+  selectTecnico.innerHTML = `<option value="">Sem técnico</option>${opcoes}`;
+}
+
+function nomeUsuario(uid) {
+  const u = listaUsuarios.find((x) => x.uid === uid);
+  return u ? u.nome : "—";
+}
+
 function observarItens() {
-  const q = query(collection(db, "itensEstoque"), orderBy("nome"));
+  const q = query(collection(db, "itensEstoque"), orderBy("equipamento"));
   onSnapshot(q, (snap) => {
     listaItens = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderizarTabela();
   }, (erro) => {
-    tabelaBody.innerHTML = `<tr><td colspan="5" class="vazio">Erro ao carregar estoque: ${erro.message}</td></tr>`;
+    tabelaBody.innerHTML = `<tr><td colspan="11" class="vazio">Erro ao carregar estoque: ${erro.message}</td></tr>`;
   });
 }
 
 function renderizarTabela() {
   const busca = document.getElementById("filtro-busca-item").value.trim().toLowerCase();
-  const somenteBaixo = document.getElementById("filtro-somente-baixo").checked;
+  const fSituacao = document.getElementById("filtro-situacao").value;
 
   const filtrados = listaItens.filter((i) => {
+    if (fSituacao && i.situacao !== fSituacao) return false;
     if (busca) {
-      const alvo = `${i.nome || ""} ${i.categoria || ""}`.toLowerCase();
+      const alvo = `${i.equipamento || ""} ${i.serial || ""} ${i.ativo || ""} ${i.lojaSetor || ""}`.toLowerCase();
       if (!alvo.includes(busca)) return false;
     }
-    if (somenteBaixo && !(i.quantidadeAtual <= i.quantidadeMinima)) return false;
     return true;
   });
 
   if (filtrados.length === 0) {
-    tabelaBody.innerHTML = `<tr><td colspan="5" class="vazio">Nenhum item encontrado.</td></tr>`;
+    tabelaBody.innerHTML = `<tr><td colspan="11" class="vazio">Nenhum item encontrado.</td></tr>`;
     return;
   }
 
-  tabelaBody.innerHTML = filtrados.map((i) => {
-    const baixo = i.quantidadeAtual <= i.quantidadeMinima;
-    return `
-      <tr${baixo ? ' style="background:#fef2f2;"' : ""}>
-        <td><strong>${escaparHTML(i.nome)}</strong></td>
-        <td>${escaparHTML(i.categoria || "—")}</td>
-        <td>${i.quantidadeAtual ?? 0} ${escaparHTML(i.unidade || "")} ${baixo ? '<span class="badge badge-status-aberto">baixo</span>' : ""}</td>
-        <td>${i.quantidadeMinima ?? 0}</td>
-        <td>
-          <div class="acoes-tabela">
-            <button class="botao-secundario btn-detalhes-item" data-id="${i.id}">Movimentar / Editar</button>
-            ${perfilAtual.papel === "admin" ? `<button class="botao-perigo btn-excluir-item" data-id="${i.id}">Excluir</button>` : ""}
-          </div>
-        </td>
-      </tr>`;
-  }).join("");
+  tabelaBody.innerHTML = filtrados.map((i) => `
+    <tr>
+      <td><strong>${escaparHTML(i.equipamento)}</strong></td>
+      <td>${escaparHTML(i.serial || "—")}</td>
+      <td>${escaparHTML(i.ativo || "—")}</td>
+      <td>${formatarData(i.chegada)}</td>
+      <td>${escaparHTML(i.delegacao || "—")}</td>
+      <td><span class="badge badge-prioridade-${i.prioridade || "media"}">${ROTULOS_PRIORIDADE[i.prioridade] || "—"}</span></td>
+      <td>${formatarData(i.saida)}</td>
+      <td>${i.tecnicoNome ? escaparHTML(i.tecnicoNome) : '<span class="texto-suave">—</span>'}</td>
+      <td>${escaparHTML(i.lojaSetor || "—")}</td>
+      <td><span class="badge ${CLASSES_SITUACAO[i.situacao] || ""}">${ROTULOS_SITUACAO[i.situacao] || i.situacao || "—"}</span></td>
+      <td>
+        <div class="acoes-tabela">
+          <button class="botao-secundario btn-editar-item" data-id="${i.id}">Editar</button>
+          ${perfilAtual.papel === "admin" ? `<button class="botao-perigo btn-excluir-item" data-id="${i.id}">Excluir</button>` : ""}
+        </div>
+      </td>
+    </tr>`
+  ).join("");
 
-  document.querySelectorAll(".btn-detalhes-item").forEach((b) =>
+  document.querySelectorAll(".btn-editar-item").forEach((b) =>
     b.addEventListener("click", () => abrirModal("editar", b.dataset.id)));
   document.querySelectorAll(".btn-excluir-item").forEach((b) =>
     b.addEventListener("click", () => excluirItem(b.dataset.id)));
 }
 
 document.getElementById("filtro-busca-item").addEventListener("input", renderizarTabela);
-document.getElementById("filtro-somente-baixo").addEventListener("change", renderizarTabela);
+document.getElementById("filtro-situacao").addEventListener("change", renderizarTabela);
 
 // -------------------- Modal --------------------
 let modoAtual = "criar";
@@ -104,28 +142,23 @@ function abrirModal(modo, itemId = null) {
   form.reset();
   document.getElementById("item-id").value = itemId || "";
 
-  const linhaQtdInicial = document.getElementById("linha-qtd-inicial");
-
   if (modo === "criar") {
     document.getElementById("modal-item-titulo").textContent = "Novo item";
-    linhaQtdInicial.style.display = "grid";
-    blocoMov.style.display = "none";
+    document.getElementById("item-prioridade").value = "media";
+    document.getElementById("item-situacao").value = "recebido";
   } else {
     const item = listaItens.find((x) => x.id === itemId);
-    document.getElementById("modal-item-titulo").textContent = item.nome;
-    document.getElementById("item-nome").value = item.nome || "";
-    document.getElementById("item-categoria").value = item.categoria || "";
-    document.getElementById("item-unidade").value = item.unidade || "";
-    linhaQtdInicial.style.display = "none"; // quantidade só muda por movimentação, não por edição direta
-
-    blocoMov.style.display = "block";
-    document.getElementById("qtd-atual-label").textContent = `${item.quantidadeAtual ?? 0} ${item.unidade || ""}`;
-    document.getElementById("mov-quantidade").value = 1;
-    document.getElementById("mov-motivo").value = "";
-    observarMovimentacoes(itemId);
-
-    // Quantidade mínima continua editável mesmo depois de criado.
-    document.getElementById("item-quantidade-minima").value = item.quantidadeMinima ?? 0;
+    document.getElementById("modal-item-titulo").textContent = item.equipamento;
+    document.getElementById("item-equipamento").value = item.equipamento || "";
+    document.getElementById("item-serial").value = item.serial || "";
+    document.getElementById("item-ativo").value = item.ativo || "";
+    document.getElementById("item-chegada").value = item.chegada || "";
+    document.getElementById("item-saida").value = item.saida || "";
+    document.getElementById("item-delegacao").value = item.delegacao || "";
+    document.getElementById("item-loja-setor").value = item.lojaSetor || "";
+    document.getElementById("item-prioridade").value = item.prioridade || "media";
+    selectTecnico.value = item.tecnicoUid || "";
+    document.getElementById("item-situacao").value = item.situacao || "recebido";
   }
 
   modal.classList.add("aberto");
@@ -133,10 +166,6 @@ function abrirModal(modo, itemId = null) {
 
 function fecharModal() {
   modal.classList.remove("aberto");
-  if (pararObservacaoMov) {
-    pararObservacaoMov();
-    pararObservacaoMov = null;
-  }
 }
 
 form.addEventListener("submit", async (evento) => {
@@ -144,10 +173,31 @@ form.addEventListener("submit", async (evento) => {
   const erroEl = document.getElementById("item-erro");
   erroEl.textContent = "";
 
-  const nome = document.getElementById("item-nome").value.trim();
-  const categoria = document.getElementById("item-categoria").value.trim();
-  const unidade = document.getElementById("item-unidade").value.trim();
-  const quantidadeMinima = Number(document.getElementById("item-quantidade-minima").value) || 0;
+  const equipamento = document.getElementById("item-equipamento").value.trim();
+  const serial = document.getElementById("item-serial").value.trim();
+  const ativo = document.getElementById("item-ativo").value.trim();
+  const chegada = document.getElementById("item-chegada").value;
+  const saida = document.getElementById("item-saida").value;
+  const delegacao = document.getElementById("item-delegacao").value.trim();
+  const lojaSetor = document.getElementById("item-loja-setor").value.trim();
+  const prioridade = document.getElementById("item-prioridade").value;
+  const tecnicoUid = selectTecnico.value || null;
+  const situacao = document.getElementById("item-situacao").value;
+
+  const dados = {
+    equipamento,
+    serial,
+    ativo,
+    chegada,
+    saida,
+    delegacao,
+    lojaSetor,
+    prioridade,
+    tecnicoUid,
+    tecnicoNome: tecnicoUid ? nomeUsuario(tecnicoUid) : null,
+    situacao,
+    atualizadoEm: serverTimestamp()
+  };
 
   const botao = document.getElementById("btn-salvar-item");
   botao.disabled = true;
@@ -155,27 +205,16 @@ form.addEventListener("submit", async (evento) => {
 
   try {
     if (modoAtual === "criar") {
-      const quantidadeInicial = Number(document.getElementById("item-quantidade-inicial").value) || 0;
       await addDoc(collection(db, "itensEstoque"), {
-        nome,
-        categoria,
-        unidade,
-        quantidadeAtual: quantidadeInicial,
-        quantidadeMinima,
-        criadoEm: serverTimestamp(),
-        atualizadoEm: serverTimestamp()
+        ...dados,
+        criadoPorUid: usuarioAtual.uid,
+        criadoPorNome: perfilAtual.nome,
+        criadoEm: serverTimestamp()
       });
-      fecharModal();
     } else {
-      await updateDoc(doc(db, "itensEstoque", itemIdAtual), {
-        nome,
-        categoria,
-        unidade,
-        quantidadeMinima,
-        atualizadoEm: serverTimestamp()
-      });
-      fecharModal();
+      await updateDoc(doc(db, "itensEstoque", itemIdAtual), dados);
     }
+    fecharModal();
   } catch (err) {
     erroEl.textContent = "Erro ao salvar: " + err.message;
   } finally {
@@ -185,95 +224,12 @@ form.addEventListener("submit", async (evento) => {
 });
 
 async function excluirItem(id) {
-  if (!confirm("Excluir este item do estoque? O histórico de movimentações dele deixará de aparecer.")) return;
+  if (!confirm("Excluir este item do estoque? Essa ação não pode ser desfeita.")) return;
   try {
     await deleteDoc(doc(db, "itensEstoque", id));
   } catch (err) {
     alert("Erro ao excluir: " + err.message);
   }
-}
-
-// -------------------- Movimentações --------------------
-document.getElementById("btn-registrar-mov").addEventListener("click", async () => {
-  const tipo = document.getElementById("mov-tipo").value;
-  const quantidade = Number(document.getElementById("mov-quantidade").value);
-  const motivo = document.getElementById("mov-motivo").value.trim();
-
-  if (!quantidade || quantidade <= 0) {
-    alert("Informe uma quantidade válida.");
-    return;
-  }
-
-  const item = listaItens.find((x) => x.id === itemIdAtual);
-  if (tipo === "saida" && quantidade > (item.quantidadeAtual ?? 0)) {
-    if (!confirm(`Atenção: isso deixará o estoque negativo (${item.quantidadeAtual ?? 0} disponível). Confirma mesmo assim?`)) return;
-  }
-
-  const botao = document.getElementById("btn-registrar-mov");
-  botao.disabled = true;
-  botao.textContent = "Registrando...";
-
-  try {
-    await addDoc(collection(db, "movimentacoesEstoque"), {
-      itemId: itemIdAtual,
-      itemNome: item.nome,
-      tipo,
-      quantidade,
-      motivo,
-      responsavelUid: usuarioAtual.uid,
-      responsavelNome: perfilAtual.nome,
-      criadoEm: serverTimestamp()
-    });
-
-    await updateDoc(doc(db, "itensEstoque", itemIdAtual), {
-      quantidadeAtual: increment(tipo === "entrada" ? quantidade : -quantidade),
-      atualizadoEm: serverTimestamp()
-    });
-
-    document.getElementById("mov-quantidade").value = 1;
-    document.getElementById("mov-motivo").value = "";
-  } catch (err) {
-    alert("Erro ao registrar movimentação: " + err.message);
-  } finally {
-    botao.disabled = false;
-    botao.textContent = "Registrar";
-  }
-});
-
-function observarMovimentacoes(itemId) {
-  if (pararObservacaoMov) pararObservacaoMov();
-
-  const q = query(
-    collection(db, "movimentacoesEstoque"),
-    where("itemId", "==", itemId),
-    orderBy("criadoEm", "desc")
-  );
-  pararObservacaoMov = onSnapshot(q, (snap) => {
-    const movs = snap.docs.map((d) => d.data());
-    const listaEl = document.getElementById("lista-movimentacoes");
-
-    // Mantém o rótulo de quantidade atual sincronizado em tempo real.
-    const itemAtualizado = listaItens.find((x) => x.id === itemId);
-    if (itemAtualizado) {
-      document.getElementById("qtd-atual-label").textContent = `${itemAtualizado.quantidadeAtual ?? 0} ${itemAtualizado.unidade || ""}`;
-    }
-
-    if (movs.length === 0) {
-      listaEl.innerHTML = '<p class="texto-suave">Nenhuma movimentação ainda.</p>';
-      return;
-    }
-
-    listaEl.innerHTML = movs.map((m) => `
-      <div style="padding:8px 0; border-bottom:1px solid var(--cor-borda); font-size:14px; display:flex; justify-content:space-between; gap:10px;">
-        <div>
-          <span class="badge ${m.tipo === "entrada" ? "badge-status-resolvido" : "badge-status-aberto"}">${m.tipo === "entrada" ? "Entrada" : "Saída"}</span>
-          <strong style="margin-left:6px;">${m.quantidade}</strong>
-          ${m.motivo ? `<span class="texto-suave"> — ${escaparHTML(m.motivo)}</span>` : ""}
-          <div class="texto-suave" style="font-size:12px;">${escaparHTML(m.responsavelNome)} · ${formatarDataHora(m.criadoEm)}</div>
-        </div>
-      </div>
-    `).join("");
-  });
 }
 
 // -------------------- Utilitários --------------------
@@ -283,8 +239,8 @@ function escaparHTML(texto) {
   return div.innerHTML;
 }
 
-function formatarDataHora(timestamp) {
-  if (!timestamp || !timestamp.toDate) return "";
-  const d = timestamp.toDate();
-  return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+function formatarData(iso) {
+  if (!iso) return '<span class="texto-suave">—</span>';
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
 }

@@ -345,6 +345,12 @@ button, .botao {
 .badge-status-andamento { background: #fef3c7; color: var(--cor-andamento); }
 .badge-status-resolvido { background: #dcfce7; color: var(--cor-resolvido); }
 
+.badge-situacao-recebido { background: #fee2e2; color: var(--cor-aberto); }
+.badge-situacao-em_configuracao { background: #fef3c7; color: var(--cor-andamento); }
+.badge-situacao-aguardando_peca { background: #e0e7ff; color: #4338ca; }
+.badge-situacao-concluido { background: #dcfce7; color: var(--cor-resolvido); }
+.badge-situacao-entregue { background: #e0f2fe; color: #0369a1; }
+
 /* ---------- Dashboard: cards e barras ---------- */
 
 .cards-grid {
@@ -418,6 +424,10 @@ button, .botao {
   border-radius: var(--raio);
   box-shadow: var(--sombra);
   overflow: hidden;
+}
+
+.tabela-scroll {
+  overflow-x: auto;
 }
 
 table {
@@ -535,6 +545,62 @@ tbody tr:hover {
   color: var(--cor-texto-suave);
 }
 
+/* ---------- Tabela de atividades (Relatórios diários) ---------- */
+
+.tabela-atividades {
+  border: 1px solid var(--cor-borda);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.linha-atividade-cabecalho,
+.linha-atividade {
+  display: grid;
+  grid-template-columns: 1.1fr 1.7fr 1.1fr 1fr 28px;
+  gap: 8px;
+  padding: 8px 10px;
+  align-items: center;
+}
+
+.linha-atividade-cabecalho {
+  background: var(--cor-primaria-tinta);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--cor-primaria-texto);
+}
+
+.linha-atividade {
+  border-top: 1px solid var(--cor-borda);
+}
+
+.linha-atividade input,
+.linha-atividade select {
+  padding: 7px 8px;
+  font-size: 13px;
+}
+
+.linha-atividade-leitura {
+  font-size: 13.5px;
+}
+
+.btn-remover-atividade {
+  background: none;
+  border: none;
+  color: var(--cor-alta);
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  justify-self: center;
+}
+
+.btn-remover-atividade:hover {
+  color: #991b1b;
+}
+
 .carregando {
   text-align: center;
   padding: 40px;
@@ -545,4 +611,19 @@ tbody tr:hover {
   .app-nav { display: none; }
   .linha-dupla { grid-template-columns: 1fr; }
   .barra-linha { grid-template-columns: 90px 1fr 30px; }
+  .linha-atividade-cabecalho { display: none; }
+  .linha-atividade:not(.linha-atividade-leitura) {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "categoria remover" "atividade atividade" "qtd status";
+  }
+  .linha-atividade input.at-categoria { grid-area: categoria; }
+  .linha-atividade input.at-atividade { grid-area: atividade; }
+  .linha-atividade input.at-quantidade { grid-area: qtd; }
+  .linha-atividade select.at-status { grid-area: status; }
+  .linha-atividade:not(.linha-atividade-leitura) .btn-remover-atividade { grid-area: remover; justify-self: end; }
+  .linha-atividade-leitura {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+  .linha-atividade-leitura span:empty { display: none; }
 }

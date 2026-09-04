@@ -104,8 +104,8 @@ function renderizarTabela() {
 
     return `
       <tr>
-        <td><strong>${escaparHTML(c.titulo)}</strong><br><span class="texto-suave">${escaparHTML(truncar(c.descricao, 60))}</span></td>
-        <td>${escaparHTML(c.solicitante)}</td>
+        <td><strong>${escaparHTML(c.numero)}</strong><br><span class="texto-suave">${escaparHTML(truncar(c.atividade, 60))}</span></td>
+        <td>${escaparHTML(c.area)}</td>
         <td><span class="badge badge-prioridade-${c.prioridade}">${ROTULOS_PRIORIDADE[c.prioridade]}</span></td>
         <td><span class="badge badge-status-${c.status}">${ROTULOS_STATUS[c.status]}</span></td>
         <td>${c.responsavelNome ? escaparHTML(c.responsavelNome) : '<span class="texto-suave">Não atribuído</span>'}</td>
@@ -135,7 +135,7 @@ function abrirModal(modo, chamadoId = null) {
   form.reset();
   document.getElementById("chamado-id").value = chamadoId || "";
 
-  const camposBasicos = ["chamado-titulo", "chamado-descricao", "chamado-solicitante", "chamado-prioridade"];
+  const camposBasicos = ["chamado-numero", "chamado-area", "chamado-atividade", "chamado-prioridade"];
 
   if (modo === "criar") {
     document.getElementById("modal-titulo").textContent = "Novo chamado";
@@ -148,9 +148,9 @@ function abrirModal(modo, chamadoId = null) {
   if (modo === "editar") {
     const c = listaChamados.find((x) => x.id === chamadoId);
     document.getElementById("modal-titulo").textContent = "Editar chamado";
-    document.getElementById("chamado-titulo").value = c.titulo;
-    document.getElementById("chamado-descricao").value = c.descricao;
-    document.getElementById("chamado-solicitante").value = c.solicitante;
+    document.getElementById("chamado-numero").value = c.numero;
+    document.getElementById("chamado-area").value = c.area;
+    document.getElementById("chamado-atividade").value = c.atividade;
     document.getElementById("chamado-prioridade").value = c.prioridade;
     document.getElementById("chamado-status").value = c.status;
     selectResponsavel.value = c.responsavelUid || "";
@@ -163,9 +163,9 @@ function abrirModal(modo, chamadoId = null) {
   if (modo === "status") {
     const c = listaChamados.find((x) => x.id === chamadoId);
     document.getElementById("modal-titulo").textContent = "Atualizar status do chamado";
-    document.getElementById("chamado-titulo").value = c.titulo;
-    document.getElementById("chamado-descricao").value = c.descricao;
-    document.getElementById("chamado-solicitante").value = c.solicitante;
+    document.getElementById("chamado-numero").value = c.numero;
+    document.getElementById("chamado-area").value = c.area;
+    document.getElementById("chamado-atividade").value = c.atividade;
     document.getElementById("chamado-prioridade").value = c.prioridade;
     document.getElementById("chamado-status").value = c.status;
     selectResponsavel.value = c.responsavelUid || "";
@@ -189,9 +189,9 @@ form.addEventListener("submit", async (evento) => {
   erroEl.textContent = "";
 
   const id = document.getElementById("chamado-id").value;
-  const titulo = document.getElementById("chamado-titulo").value.trim();
-  const descricao = document.getElementById("chamado-descricao").value.trim();
-  const solicitante = document.getElementById("chamado-solicitante").value.trim();
+  const numero = document.getElementById("chamado-numero").value.trim();
+  const area = document.getElementById("chamado-area").value.trim();
+  const atividade = document.getElementById("chamado-atividade").value.trim();
   const prioridade = document.getElementById("chamado-prioridade").value;
   const responsavelUid = selectResponsavel.value || null;
   const status = document.getElementById("chamado-status").value || "aberto";
@@ -203,9 +203,9 @@ form.addEventListener("submit", async (evento) => {
   try {
     if (modoAtual === "criar") {
       await addDoc(collection(db, "chamados"), {
-        titulo,
-        descricao,
-        solicitante,
+        numero,
+        area,
+        atividade,
         prioridade,
         status: perfilAtual.papel === "admin" ? status : "aberto",
         responsavelUid: perfilAtual.papel === "admin" ? responsavelUid : null,
@@ -217,9 +217,9 @@ form.addEventListener("submit", async (evento) => {
       });
     } else if (modoAtual === "editar") {
       await updateDoc(doc(db, "chamados", id), {
-        titulo,
-        descricao,
-        solicitante,
+        numero,
+        area,
+        atividade,
         prioridade,
         status,
         responsavelUid,

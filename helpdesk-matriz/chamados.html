@@ -54,11 +54,12 @@
     </div>
 
     <div class="tabela-wrapper">
+      <div class="tabela-scroll">
       <table>
         <thead>
           <tr>
-            <th>Título</th>
-            <th>Solicitante</th>
+            <th>Nº do chamado</th>
+            <th>Área atendida</th>
             <th>Prioridade</th>
             <th>Status</th>
             <th>Responsável</th>
@@ -69,6 +70,7 @@
           <tr><td colspan="6" class="carregando">Carregando chamados...</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
   </main>
 
@@ -80,28 +82,27 @@
         <input type="hidden" id="chamado-id" />
 
         <div class="campo">
-          <label for="chamado-titulo">Título</label>
-          <input type="text" id="chamado-titulo" required />
+          <label for="chamado-numero">Número do chamado</label>
+          <input type="text" id="chamado-numero" required placeholder="Ex: 2026-0134" />
         </div>
 
         <div class="campo">
-          <label for="chamado-descricao">Descrição</label>
-          <textarea id="chamado-descricao" rows="3" required></textarea>
+          <label for="chamado-area">Área atendida</label>
+          <input type="text" id="chamado-area" required placeholder="Ex: Financeiro" />
         </div>
 
-        <div class="linha-dupla">
-          <div class="campo">
-            <label for="chamado-solicitante">Solicitante</label>
-            <input type="text" id="chamado-solicitante" required />
-          </div>
-          <div class="campo">
-            <label for="chamado-prioridade">Prioridade</label>
-            <select id="chamado-prioridade">
-              <option value="baixa">Baixa</option>
-              <option value="media" selected>Média</option>
-              <option value="alta">Alta</option>
-            </select>
-          </div>
+        <div class="campo">
+          <label for="chamado-atividade">Atividade realizada</label>
+          <textarea id="chamado-atividade" rows="3" required placeholder="Descreva o que foi feito no atendimento"></textarea>
+        </div>
+
+        <div class="campo">
+          <label for="chamado-prioridade">Prioridade</label>
+          <select id="chamado-prioridade">
+            <option value="baixa">Baixa</option>
+            <option value="media" selected>Média</option>
+            <option value="alta">Alta</option>
+          </select>
         </div>
 
         <div class="linha-dupla" id="linha-admin-chamado">

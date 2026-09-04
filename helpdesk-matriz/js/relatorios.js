@@ -11,7 +11,6 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
-  getDocs,
   query,
   where,
   orderBy,
@@ -20,40 +19,58 @@ import {
 
 let usuarioAtual = null;
 let perfilAtual = null;
-let meusChamados = [];     // chamados onde o usuário é responsável (para o checklist)
 let meusRelatorios = [];   // cache local dos relatórios do próprio usuário
 
 const listaEl = document.getElementById("lista-relatorios");
 const modal = document.getElementById("modal-relatorio");
 const form = document.getElementById("form-relatorio");
+const linhasAtividadesEl = document.getElementById("linhas-atividades");
+
+export const ROTULOS_STATUS_ATIVIDADE = { concluido: "Concluído", andamento: "Em andamento", pendente: "Pendente" };
+const CLASSES_STATUS_ATIVIDADE = { concluido: "badge-status-resolvido", andamento: "badge-status-andamento", pendente: "badge-status-aberto" };
 
 protegerPagina((user, perfil) => {
   usuarioAtual = user;
   perfilAtual = perfil;
   montarNav(perfil);
-  carregarMeusChamados();
   observarRelatorios();
 });
 
-// -------------------- Chamados do próprio técnico (para vincular) --------------------
-async function carregarMeusChamados() {
-  const q = query(collection(db, "chamados"), where("responsavelUid", "==", usuarioAtual.uid));
-  const snap = await getDocs(q);
-  meusChamados = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+// -------------------- Linhas de atividade (dinâmicas) --------------------
+function criarLinhaAtividade(dados = {}) {
+  const linha = document.createElement("div");
+  linha.className = "linha-atividade";
+  linha.innerHTML = `
+    <input type="text" class="at-categoria" placeholder="Ex: Suporte, Manutenção" value="${escaparAtributo(dados.categoria)}" />
+    <input type="text" class="at-atividade" placeholder="Descreva a atividade" value="${escaparAtributo(dados.atividade)}" />
+    <input type="text" class="at-quantidade" placeholder="Ex: 3 ou Financeiro" value="${escaparAtributo(dados.quantidadeArea)}" />
+    <select class="at-status">
+      <option value="concluido"${dados.status === "concluido" || !dados.status ? " selected" : ""}>Concluído</option>
+      <option value="andamento"${dados.status === "andamento" ? " selected" : ""}>Em andamento</option>
+      <option value="pendente"${dados.status === "pendente" ? " selected" : ""}>Pendente</option>
+    </select>
+    <button type="button" class="btn-remover-atividade" title="Remover linha">&times;</button>
+  `;
+  linha.querySelector(".btn-remover-atividade").addEventListener("click", () => {
+    // Sempre deixa pelo menos uma linha no formulário.
+    if (linhasAtividadesEl.children.length > 1) {
+      linha.remove();
+    } else {
+      linha.querySelectorAll("input").forEach((i) => i.value = "");
+    }
+  });
+  linhasAtividadesEl.appendChild(linha);
 }
 
-function renderizarChecklistChamados(idsMarcados = []) {
-  const container = document.getElementById("lista-chamados-checkbox");
-  if (meusChamados.length === 0) {
-    container.innerHTML = '<p class="texto-suave">Você ainda não é responsável por nenhum chamado.</p>';
-    return;
-  }
-  container.innerHTML = meusChamados.map((c) => `
-    <label style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:14px; font-weight:normal;">
-      <input type="checkbox" value="${c.id}" data-titulo="${escaparAtributo(c.titulo)}" ${idsMarcados.includes(c.id) ? "checked" : ""} style="width:auto;" />
-      ${escaparHTML(c.titulo)}
-    </label>
-  `).join("");
+document.getElementById("btn-add-atividade").addEventListener("click", () => criarLinhaAtividade());
+
+function coletarAtividades() {
+  return Array.from(linhasAtividadesEl.querySelectorAll(".linha-atividade")).map((linha) => ({
+    categoria: linha.querySelector(".at-categoria").value.trim(),
+    atividade: linha.querySelector(".at-atividade").value.trim(),
+    quantidadeArea: linha.querySelector(".at-quantidade").value.trim(),
+    status: linha.querySelector(".at-status").value
+  })).filter((a) => a.categoria || a.atividade || a.quantidadeArea);
 }
 
 // -------------------- Observar relatórios do próprio usuário --------------------
@@ -69,6 +86,29 @@ function observarRelatorios() {
   }, (erro) => {
     listaEl.innerHTML = `<p class="vazio">Erro ao carregar relatórios: ${erro.message}</p>`;
   });
+}
+
+function renderizarTabelaAtividades(atividades) {
+  if (!atividades || atividades.length === 0) return "";
+  return `
+    <div class="tabela-atividades" style="margin-top:8px;">
+      <div class="linha-atividade-cabecalho">
+        <span>Categoria</span>
+        <span>Atividade</span>
+        <span>Quantidade / Área</span>
+        <span>Status</span>
+        <span></span>
+      </div>
+      ${atividades.map((a) => `
+        <div class="linha-atividade linha-atividade-leitura">
+          <span>${escaparHTML(a.categoria) || "—"}</span>
+          <span>${escaparHTML(a.atividade) || "—"}</span>
+          <span>${escaparHTML(a.quantidadeArea) || "—"}</span>
+          <span><span class="badge ${CLASSES_STATUS_ATIVIDADE[a.status] || ""}">${ROTULOS_STATUS_ATIVIDADE[a.status] || a.status || "—"}</span></span>
+          <span></span>
+        </div>
+      `).join("")}
+    </div>`;
 }
 
 function renderizarLista() {
@@ -89,12 +129,8 @@ function renderizarLista() {
           <button class="botao-perigo btn-excluir-relatorio" data-id="${r.id}">Excluir</button>
         </div>
       </div>
-      <p style="white-space:pre-wrap; margin:0 0 10px;">${escaparHTML(r.resumo)}</p>
-      ${
-        r.chamadosTitulos && r.chamadosTitulos.length > 0
-          ? `<p class="texto-suave" style="margin:0;">Chamados atendidos: ${r.chamadosTitulos.map(escaparHTML).join(", ")}</p>`
-          : ""
-      }
+      ${renderizarTabelaAtividades(r.atividades)}
+      ${r.resumo ? `<p style="white-space:pre-wrap; margin:12px 0 0;">${escaparHTML(r.resumo)}</p>` : ""}
     </div>
   `).join("");
 
@@ -122,17 +158,22 @@ function abrirModal(modo, relatorioId = null) {
   document.getElementById("relatorio-erro").textContent = "";
   form.reset();
   document.getElementById("relatorio-id").value = relatorioId || "";
+  linhasAtividadesEl.innerHTML = "";
 
   if (modo === "criar") {
     document.getElementById("modal-relatorio-titulo").textContent = "Novo relatório do dia";
     document.getElementById("relatorio-data").value = hojeISO();
-    renderizarChecklistChamados([]);
+    criarLinhaAtividade();
   } else {
     const r = meusRelatorios.find((x) => x.id === relatorioId);
     document.getElementById("modal-relatorio-titulo").textContent = "Editar relatório";
     document.getElementById("relatorio-data").value = r.data;
-    document.getElementById("relatorio-resumo").value = r.resumo;
-    renderizarChecklistChamados(r.chamadosIds || []);
+    document.getElementById("relatorio-resumo").value = r.resumo || "";
+    if (r.atividades && r.atividades.length > 0) {
+      r.atividades.forEach((a) => criarLinhaAtividade(a));
+    } else {
+      criarLinhaAtividade();
+    }
   }
 
   modal.classList.add("aberto");
@@ -150,12 +191,12 @@ form.addEventListener("submit", async (evento) => {
   const id = document.getElementById("relatorio-id").value;
   const data = document.getElementById("relatorio-data").value;
   const resumo = document.getElementById("relatorio-resumo").value.trim();
+  const atividades = coletarAtividades();
 
-  const checkboxesMarcados = Array.from(
-    document.querySelectorAll('#lista-chamados-checkbox input[type="checkbox"]:checked')
-  );
-  const chamadosIds = checkboxesMarcados.map((c) => c.value);
-  const chamadosTitulos = checkboxesMarcados.map((c) => c.dataset.titulo);
+  if (atividades.length === 0) {
+    erroEl.textContent = "Adicione ao menos uma atividade com categoria ou descrição preenchida.";
+    return;
+  }
 
   const botao = document.getElementById("btn-salvar-relatorio");
   botao.disabled = true;
@@ -167,18 +208,16 @@ form.addEventListener("submit", async (evento) => {
         tecnicoUid: usuarioAtual.uid,
         tecnicoNome: perfilAtual.nome,
         data,
+        atividades,
         resumo,
-        chamadosIds,
-        chamadosTitulos,
         criadoEm: serverTimestamp(),
         atualizadoEm: serverTimestamp()
       });
     } else {
       await updateDoc(doc(db, "relatorios", id), {
         data,
+        atividades,
         resumo,
-        chamadosIds,
-        chamadosTitulos,
         atualizadoEm: serverTimestamp()
       });
     }

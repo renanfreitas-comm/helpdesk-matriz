@@ -34,64 +34,119 @@
       <h1>Estoque</h1>
       <button class="botao-primario" id="btn-novo-item">+ Novo item</button>
     </div>
+    <p class="texto-suave" style="margin-top:-14px;margin-bottom:20px;">
+      Controle dos equipamentos que chegam, são configurados e saem da TI.
+    </p>
 
     <div class="filtros">
-      <input type="text" id="filtro-busca-item" placeholder="Buscar item ou categoria..." style="max-width:280px;" />
-      <label style="display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px; color:var(--cor-texto-suave);">
-        <input type="checkbox" id="filtro-somente-baixo" style="width:auto;" /> Somente estoque baixo
-      </label>
+      <input type="text" id="filtro-busca-item" placeholder="Buscar por equipamento, S/N, ativo ou loja/setor..." style="max-width:320px;" />
+      <select id="filtro-situacao">
+        <option value="">Todas as situações</option>
+        <option value="recebido">Recebido</option>
+        <option value="em_configuracao">Em configuração</option>
+        <option value="aguardando_peca">Aguardando peça</option>
+        <option value="concluido">Concluído</option>
+        <option value="entregue">Entregue</option>
+      </select>
     </div>
 
     <div class="tabela-wrapper">
+      <div class="tabela-scroll">
       <table>
         <thead>
           <tr>
-            <th>Item</th>
-            <th>Categoria</th>
-            <th>Quantidade atual</th>
-            <th>Mínimo</th>
+            <th>Equipamento</th>
+            <th>S/N</th>
+            <th>Ativo</th>
+            <th>Chegada</th>
+            <th>Delegação</th>
+            <th>Prioridade</th>
+            <th>Saída</th>
+            <th>Técnico</th>
+            <th>Loja/Setor</th>
+            <th>Situação</th>
             <th>Ações</th>
           </tr>
         </thead>
         <tbody id="tabela-estoque">
-          <tr><td colspan="5" class="carregando">Carregando itens...</td></tr>
+          <tr><td colspan="11" class="carregando">Carregando itens...</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
   </main>
 
-  <!-- Modal: item de estoque -->
+  <!-- Modal: item de estoque / equipamento -->
   <div class="modal-fundo" id="modal-item">
-    <div class="modal" style="max-width:560px;">
+    <div class="modal" style="max-width:600px;">
       <h2 id="modal-item-titulo">Novo item</h2>
       <form class="modal-form" id="form-item">
         <input type="hidden" id="item-id" />
 
         <div class="campo">
-          <label for="item-nome">Nome do item</label>
-          <input type="text" id="item-nome" required placeholder="Ex: Cabo de rede Cat6" />
+          <label for="item-equipamento">Equipamento</label>
+          <input type="text" id="item-equipamento" required placeholder="Ex: Notebook Dell Latitude 3420" />
         </div>
 
         <div class="linha-dupla">
           <div class="campo">
-            <label for="item-categoria">Categoria</label>
-            <input type="text" id="item-categoria" placeholder="Ex: Cabos, Periféricos, Peças" />
+            <label for="item-serial">S/N (número de série)</label>
+            <input type="text" id="item-serial" placeholder="Ex: 8J3K2L1" />
           </div>
           <div class="campo">
-            <label for="item-unidade">Unidade</label>
-            <input type="text" id="item-unidade" placeholder="Ex: un, m, caixa" />
+            <label for="item-ativo">Ativo</label>
+            <input type="text" id="item-ativo" placeholder="Ex: PAT-0452" />
           </div>
         </div>
 
-        <div class="linha-dupla" id="linha-qtd-inicial">
+        <div class="linha-dupla">
           <div class="campo">
-            <label for="item-quantidade-inicial">Quantidade inicial</label>
-            <input type="number" id="item-quantidade-inicial" min="0" value="0" />
+            <label for="item-chegada">Chegada</label>
+            <input type="date" id="item-chegada" />
           </div>
           <div class="campo">
-            <label for="item-quantidade-minima">Quantidade mínima (alerta)</label>
-            <input type="number" id="item-quantidade-minima" min="0" value="0" />
+            <label for="item-saida">Saída</label>
+            <input type="date" id="item-saida" />
           </div>
+        </div>
+
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="item-delegacao">Delegação</label>
+            <input type="text" id="item-delegacao" placeholder="Ex: Loja Matriz" />
+          </div>
+          <div class="campo">
+            <label for="item-loja-setor">Loja/Setor</label>
+            <input type="text" id="item-loja-setor" placeholder="Ex: Financeiro" />
+          </div>
+        </div>
+
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="item-prioridade">Prioridade</label>
+            <select id="item-prioridade">
+              <option value="baixa">Baixa</option>
+              <option value="media" selected>Média</option>
+              <option value="alta">Alta</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="item-tecnico">Técnico</label>
+            <select id="item-tecnico">
+              <option value="">Sem técnico</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="item-situacao">Situação</label>
+          <select id="item-situacao">
+            <option value="recebido">Recebido</option>
+            <option value="em_configuracao">Em configuração</option>
+            <option value="aguardando_peca">Aguardando peça</option>
+            <option value="concluido">Concluído</option>
+            <option value="entregue">Entregue</option>
+          </select>
         </div>
 
         <p class="erro-msg" id="item-erro"></p>
@@ -101,27 +156,6 @@
           <button type="submit" class="botao-primario" id="btn-salvar-item">Salvar</button>
         </div>
       </form>
-
-      <!-- Movimentações: só aparece ao editar um item já existente -->
-      <div id="bloco-movimentacao" style="display:none; margin-top:24px; border-top:1px solid var(--cor-borda); padding-top:20px;">
-        <h2>Registrar movimentação — em estoque: <span id="qtd-atual-label">0</span></h2>
-        <div class="linha-dupla" style="margin-bottom:10px;">
-          <select id="mov-tipo">
-            <option value="entrada">Entrada (reposição)</option>
-            <option value="saida">Saída (uso/retirada)</option>
-          </select>
-          <input type="number" id="mov-quantidade" min="1" value="1" placeholder="Quantidade" />
-        </div>
-        <div style="display:flex; gap:8px; margin-bottom:20px;">
-          <input type="text" id="mov-motivo" placeholder="Motivo / finalidade (ex: usado no chamado #123)" />
-          <button type="button" class="botao-secundario" id="btn-registrar-mov">Registrar</button>
-        </div>
-
-        <h2>Histórico de movimentações</h2>
-        <div id="lista-movimentacoes">
-          <p class="texto-suave">Nenhuma movimentação ainda.</p>
-        </div>
-      </div>
     </div>
   </div>
 

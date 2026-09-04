@@ -14,6 +14,9 @@ let usuarios = [];
 let relatorios = [];
 let chamados = [];
 
+const ROTULOS_STATUS_ATIVIDADE = { concluido: "Concluído", andamento: "Em andamento", pendente: "Pendente" };
+const CLASSES_STATUS_ATIVIDADE = { concluido: "badge-status-resolvido", andamento: "badge-status-andamento", pendente: "badge-status-aberto" };
+
 protegerPagina(async (user, perfil) => {
   montarNav(perfil);
 
@@ -107,6 +110,29 @@ function renderizarProdutividade(relatoriosFiltrados, chamadosResolvidosFiltrado
   }).join("");
 }
 
+function renderizarTabelaAtividades(atividades) {
+  if (!atividades || atividades.length === 0) return "";
+  return `
+    <div class="tabela-atividades" style="margin-top:4px;">
+      <div class="linha-atividade-cabecalho">
+        <span>Categoria</span>
+        <span>Atividade</span>
+        <span>Quantidade / Área</span>
+        <span>Status</span>
+        <span></span>
+      </div>
+      ${atividades.map((a) => `
+        <div class="linha-atividade linha-atividade-leitura">
+          <span>${escaparHTML(a.categoria) || "—"}</span>
+          <span>${escaparHTML(a.atividade) || "—"}</span>
+          <span>${escaparHTML(a.quantidadeArea) || "—"}</span>
+          <span><span class="badge ${CLASSES_STATUS_ATIVIDADE[a.status] || ""}">${ROTULOS_STATUS_ATIVIDADE[a.status] || a.status || "—"}</span></span>
+          <span></span>
+        </div>
+      `).join("")}
+    </div>`;
+}
+
 function renderizarListaRelatorios(relatoriosFiltrados) {
   const container = document.getElementById("lista-relatorios-supervisao");
 
@@ -123,12 +149,8 @@ function renderizarListaRelatorios(relatoriosFiltrados) {
         <strong>${escaparHTML(r.tecnicoNome)}</strong>
         <span class="texto-suave">${formatarData(r.data)}</span>
       </div>
-      <p style="white-space:pre-wrap; margin:0 0 8px;">${escaparHTML(r.resumo)}</p>
-      ${
-        r.chamadosTitulos && r.chamadosTitulos.length > 0
-          ? `<p class="texto-suave" style="margin:0;">Chamados atendidos: ${r.chamadosTitulos.map(escaparHTML).join(", ")}</p>`
-          : ""
-      }
+      ${renderizarTabelaAtividades(r.atividades)}
+      ${r.resumo ? `<p style="white-space:pre-wrap; margin:12px 0 0;">${escaparHTML(r.resumo)}</p>` : ""}
     </div>
   `).join("");
 }

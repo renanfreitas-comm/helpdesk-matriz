@@ -42,12 +42,12 @@ helpdesk-matriz/
 
 ### O que cada módulo faz
 
-- **Chamados**: abertura e acompanhamento dos chamados de suporte, com atribuição de responsável.
-- **Relatórios**: cada técnico registra um resumo do que fez em cada dia, podendo vincular os chamados que atendeu naquele dia. Cada um vê o próprio histórico.
+- **Chamados**: abertura e acompanhamento dos chamados de suporte. Ao criar um chamado, o técnico preenche número do chamado, área atendida e atividade realizada; prioridade, responsável e status continuam disponíveis para organização e para os indicadores do dashboard.
+- **Relatórios**: cada técnico monta o relatório diário de atividades como uma pequena tabela (igual ao modelo em papel/planilha usado pela equipe): para cada linha, informa categoria, atividade, quantidade/área e status (Concluído, Em andamento ou Pendente), podendo adicionar quantas linhas quiser com o botão "+ Adicionar atividade". Um campo de resumo no final é opcional. Cada um vê o próprio histórico.
 - **Máquinas**: cadastro do parque de máquinas (nome/patrimônio, setor, usuário responsável, status) com especificações técnicas (SO, processador, RAM, armazenamento, IP) e um histórico de manutenções por máquina — toda vez que alguém mexe numa máquina, registra ali.
-- **Estoque**: itens de estoque (peças, cabos, periféricos) com quantidade mínima de alerta. Toda entrada (reposição) ou saída (uso) é registrada como uma movimentação, e a quantidade atual é calculada automaticamente a partir delas.
+- **Estoque**: controle dos equipamentos que passam pela TI (chegada, configuração e saída), no mesmo formato da planilha usada pela equipe — cada item registra equipamento, S/N, ativo, data de chegada, delegação, prioridade, data de saída, técnico responsável, loja/setor e situação (Recebido, Em configuração, Aguardando peça, Concluído ou Entregue). Não há controle de quantidade/estoque mínimo nesta versão — é um registro individual por equipamento.
 - **Usuários** (somente admin): não existe cadastro público — só um admin cria novas contas por aqui (nome, e-mail, senha temporária e papel), além de promover/rebaixar técnicos e admins.
-- **Supervisão** (somente admin): visão consolidada dos relatórios diários de todo o time, filtrável por técnico e por período, com um resumo de produtividade (chamados resolvidos + relatórios enviados) por pessoa.
+- **Supervisão** (somente admin): visão consolidada dos relatórios diários de todo o time (com a mesma tabela de atividades), filtrável por técnico e por período, com um resumo de produtividade (chamados resolvidos + relatórios enviados) por pessoa.
 
 ---
 
@@ -78,7 +78,7 @@ Essas regras garantem que:
 
 ### Sobre os "índices" do Firestore (importante)
 
-As telas de **Relatórios** e **Estoque** fazem buscas que combinam um filtro com uma ordenação (por exemplo: relatórios de um técnico, ordenados por data). O Firestore exige um "índice composto" para isso funcionar, e ele **não vem criado por padrão**.
+A tela de **Relatórios** faz uma busca que combina um filtro com uma ordenação (relatórios de um técnico, ordenados por data). O Firestore exige um "índice composto" para isso funcionar, e ele **não vem criado por padrão**.
 
 Não se preocupe em criar isso manualmente: na primeira vez que uma dessas telas rodar essa busca, vai aparecer um erro no console do navegador (tecla F12 → aba "Console") com uma frase parecida com *"The query requires an index"* e, junto, **um link azul**. Basta abrir esse link (ele já vem com tudo preenchido), clicar em **Criar índice** no Firebase e aguardar cerca de 1 minuto. Depois disso, é só recarregar a página e a tela passa a funcionar normalmente. Isso só precisa ser feito uma vez por tela.
 
@@ -143,6 +143,8 @@ Por segurança, o Firebase só aceita pedidos de login vindos de domínios autor
 ## Passo 8 — Criar o primeiro admin (manualmente, só uma vez)
 
 Não existe cadastro público nesta plataforma — nem mesmo o primeiro usuário se cadastra sozinho pela tela de login. Por isso, a primeiríssima conta (a sua, de admin) precisa ser criada diretamente no Console do Firebase. É rápido e só precisa ser feito uma única vez:
+
+> 📄 **Seus dados já estão prontos** no arquivo `ADMIN-INICIAL-NAO-SUBIR.txt` (nesta mesma pasta) — nome, e-mail, senha e o papel a usar em cada campo abaixo. Esse arquivo já está no `.gitignore` para nunca ser enviado ao GitHub; depois de usá-lo, é uma boa ideia apagá-lo do seu computador ou trocar a senha pelo link "Esqueci minha senha" assim que entrar pela primeira vez.
 
 1. No console do Firebase, vá em **Authentication → Users (Usuários)** e clique em **Add user (Adicionar usuário)**.
 2. Preencha seu e-mail e uma senha, e clique em **Add user**. Copie o **User UID** que aparece na lista (uma sequência de letras e números) — vai precisar dele no próximo passo.

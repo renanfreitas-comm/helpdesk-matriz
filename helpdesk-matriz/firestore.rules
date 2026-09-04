@@ -82,19 +82,10 @@ service cloud.firestore {
       }
     }
 
-    // Estoque de peças/periféricos.
+    // Estoque: controle de equipamentos (chegada, configuração, saída).
     match /itensEstoque/{itemId} {
       allow read: if estaLogado();
       allow create, update: if estaLogado();
-      allow delete: if ehAdmin();
-    }
-
-    // Movimentações de estoque (entradas/saídas). Não são editáveis para
-    // preservar o histórico — apenas criadas; exclusão só em caso de erro,
-    // restrita ao admin.
-    match /movimentacoesEstoque/{movId} {
-      allow read: if estaLogado();
-      allow create: if estaLogado();
       allow delete: if ehAdmin();
     }
   }
