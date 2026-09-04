@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="logo">
+      <img src="assets/logo-comm.png" alt="Comm" class="logo-principal" />
+      <span class="selo-setor">Tecnologia da Informação</span>
+    </div>
+    <nav class="app-nav">
+      <a class="nav-link" href="dashboard.html">Dashboard</a>
+      <a class="nav-link" href="chamados.html">Chamados</a>
+      <a class="nav-link" href="relatorios.html">Relatórios</a>
+      <a class="nav-link" href="maquinas.html">Máquinas</a>
+      <a class="nav-link" href="estoque.html">Estoque</a>
+      <a class="nav-link" id="nav-link-usuarios" href="usuarios.html" style="display:none">Usuários</a>
+      <a class="nav-link" id="nav-link-supervisao" href="supervisao.html" style="display:none">Supervisão</a>
+    </nav>
+    <div class="app-user">
+      <span class="nome" id="nav-nome">—</span>
+      <span class="badge" id="nav-papel"></span>
+      <button class="botao-secundario" id="nav-sair">Sair</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <h1>Visão geral</h1>
+
+    <div class="cards-grid">
+      <div class="card">
+        <div class="valor" id="card-total">0</div>
+        <div class="rotulo">Total de chamados</div>
+      </div>
+      <div class="card destaque-aberto">
+        <div class="valor" id="card-aberto">0</div>
+        <div class="rotulo">Abertos</div>
+      </div>
+      <div class="card destaque-andamento">
+        <div class="valor" id="card-andamento">0</div>
+        <div class="rotulo">Em andamento</div>
+      </div>
+      <div class="card destaque-resolvido">
+        <div class="valor" id="card-resolvido">0</div>
+        <div class="rotulo">Resolvidos</div>
+      </div>
+    </div>
+
+    <div class="painel">
+      <h2>Chamados por prioridade</h2>
+      <div id="barras-prioridade"></div>
+    </div>
+
+    <div class="painel">
+      <h2>Chamados por técnico responsável</h2>
+      <div id="barras-tecnico"></div>
+    </div>
+  </main>
+
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>

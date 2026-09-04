@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chamados — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="logo">
+      <img src="assets/logo-comm.png" alt="Comm" class="logo-principal" />
+      <span class="selo-setor">Tecnologia da Informação</span>
+    </div>
+    <nav class="app-nav">
+      <a class="nav-link" href="dashboard.html">Dashboard</a>
+      <a class="nav-link" href="chamados.html">Chamados</a>
+      <a class="nav-link" href="relatorios.html">Relatórios</a>
+      <a class="nav-link" href="maquinas.html">Máquinas</a>
+      <a class="nav-link" href="estoque.html">Estoque</a>
+      <a class="nav-link" id="nav-link-usuarios" href="usuarios.html" style="display:none">Usuários</a>
+      <a class="nav-link" id="nav-link-supervisao" href="supervisao.html" style="display:none">Supervisão</a>
+    </nav>
+    <div class="app-user">
+      <span class="nome" id="nav-nome">—</span>
+      <span class="badge" id="nav-papel"></span>
+      <button class="botao-secundario" id="nav-sair">Sair</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <h1>Chamados</h1>
+      <button class="botao-primario" id="btn-novo-chamado">+ Novo chamado</button>
+    </div>
+
+    <div class="filtros">
+      <select id="filtro-status">
+        <option value="">Todos os status</option>
+        <option value="aberto">Aberto</option>
+        <option value="andamento">Em andamento</option>
+        <option value="resolvido">Resolvido</option>
+      </select>
+      <select id="filtro-prioridade">
+        <option value="">Todas as prioridades</option>
+        <option value="alta">Alta</option>
+        <option value="media">Média</option>
+        <option value="baixa">Baixa</option>
+      </select>
+      <select id="filtro-responsavel">
+        <option value="">Todos os responsáveis</option>
+      </select>
+    </div>
+
+    <div class="tabela-wrapper">
+      <div class="tabela-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Nº do chamado</th>
+            <th>Área atendida</th>
+            <th>Prioridade</th>
+            <th>Status</th>
+            <th>Responsável</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-chamados">
+          <tr><td colspan="6" class="carregando">Carregando chamados...</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal: novo chamado / editar chamado -->
+  <div class="modal-fundo" id="modal-chamado">
+    <div class="modal">
+      <h2 id="modal-titulo">Novo chamado</h2>
+      <form class="modal-form" id="form-chamado">
+        <input type="hidden" id="chamado-id" />
+
+        <div class="campo">
+          <label for="chamado-numero">Número do chamado</label>
+          <input type="text" id="chamado-numero" required placeholder="Ex: 2026-0134" />
+        </div>
+
+        <div class="campo">
+          <label for="chamado-area">Área atendida</label>
+          <input type="text" id="chamado-area" required placeholder="Ex: Financeiro" />
+        </div>
+
+        <div class="campo">
+          <label for="chamado-atividade">Atividade realizada</label>
+          <textarea id="chamado-atividade" rows="3" required placeholder="Descreva o que foi feito no atendimento"></textarea>
+        </div>
+
+        <div class="campo">
+          <label for="chamado-prioridade">Prioridade</label>
+          <select id="chamado-prioridade">
+            <option value="baixa">Baixa</option>
+            <option value="media" selected>Média</option>
+            <option value="alta">Alta</option>
+          </select>
+        </div>
+
+        <div class="linha-dupla" id="linha-admin-chamado">
+          <div class="campo">
+            <label for="chamado-responsavel">Responsável</label>
+            <select id="chamado-responsavel">
+              <option value="">Sem responsável</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="chamado-status">Status</label>
+            <select id="chamado-status">
+              <option value="aberto">Aberto</option>
+              <option value="andamento">Em andamento</option>
+              <option value="resolvido">Resolvido</option>
+            </select>
+          </div>
+        </div>
+
+        <p class="erro-msg" id="chamado-erro"></p>
+
+        <div class="modal-acoes">
+          <button type="button" class="botao-secundario" id="btn-cancelar-chamado">Cancelar</button>
+          <button type="submit" class="botao-primario" id="btn-salvar-chamado">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/chamados.js"></script>
+</body>
+</html>

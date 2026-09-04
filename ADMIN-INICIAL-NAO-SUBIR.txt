@@ -1,0 +1,51 @@
+==============================================================================
+DADOS DO PRIMEIRO ADMIN — Help Desk Matriz
+==============================================================================
+
+ATENÇÃO: este arquivo tem sua senha em texto puro. Ele já está listado no
+.gitignore para não ser enviado ao GitHub por engano, mas depois de usá-lo
+o ideal é apagá-lo do seu computador (ou ao menos trocar a senha no primeiro
+acesso pelo link "Esqueci minha senha" na tela de login).
+
+Use estes dados no "Passo 8 — Criar o primeiro admin" do README.md:
+
+  Nome:  Renan Freitas
+  E-mail: refreitas@commcenter.com.br
+  Senha:  Ftz!0912
+  Papel:  admin
+
+------------------------------------------------------------------------------
+Passo a passo (resumo do Passo 8 do README, já com seus dados prontos):
+------------------------------------------------------------------------------
+
+1. No Console do Firebase do seu projeto, vá em
+   Authentication → Users → Add user.
+   - E-mail: refreitas@commcenter.com.br
+   - Senha:  Ftz!0912
+   Clique em "Add user" e copie o "User UID" que aparece na lista.
+
+2. Vá em Firestore Database → Data → Start collection.
+   - Collection ID: usuarios
+   - Document ID: cole o User UID copiado no passo 1 (não deixe automático)
+
+3. Adicione estes campos ao documento:
+   - nome     (string)    → Renan Freitas
+   - email    (string)    → refreitas@commcenter.com.br
+   - papel    (string)    → admin
+   - criadoEm (timestamp) → data/hora atual
+
+4. Salve. Pronto — acesse o site publicado e entre com:
+   E-mail: refreitas@commcenter.com.br
+   Senha:  Ftz!0912
+
+Você já entra como Supervisor/Admin e pode cadastrar o resto do time pela
+própria tela "Usuários" do site (Passo 9 do README).
+
+------------------------------------------------------------------------------
+Por que isso não vem pronto no código?
+------------------------------------------------------------------------------
+O site (GitHub Pages) e o banco de dados/login (Firebase) são coisas
+separadas: o código não tem como criar sua conta sozinho porque ela precisa
+existir dentro do SEU projeto Firebase, que só é criado quando você segue os
+Passos 1 a 4 do README. Depois disso, os passos acima levam menos de um
+minuto.
