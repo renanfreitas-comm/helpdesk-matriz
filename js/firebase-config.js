@@ -13,12 +13,12 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-aut
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "COLE_AQUI_SUA_API_KEY",
-  authDomain: "COLE_AQUI_SEU_PROJETO.firebaseapp.com",
-  projectId: "COLE_AQUI_SEU_PROJECT_ID",
-  storageBucket: "COLE_AQUI_SEU_PROJETO.appspot.com",
-  messagingSenderId: "COLE_AQUI_SEU_SENDER_ID",
-  appId: "COLE_AQUI_SEU_APP_ID"
+  apiKey: "AIzaSyCHH5J6doAU8TAUbCT1znOoOZM73ppvjis",
+  authDomain: "helpdesk-matriz-58813.firebaseapp.com",
+  projectId: "helpdesk-matriz-58813",
+  storageBucket: "helpdesk-matriz-58813.firebasestorage.app",
+  messagingSenderId: "678044841159",
+  appId: "1:678044841159:web:c9872965d4a08ee2dfbae2"
 };
 
 export const app = initializeApp(firebaseConfig);
