@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supervisão — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="logo">
+      <img src="assets/logo-comm.png" alt="Comm" class="logo-principal" />
+      <span class="selo-setor">Tecnologia da Informação</span>
+    </div>
+    <nav class="app-nav">
+      <a class="nav-link" href="dashboard.html">Dashboard</a>
+      <a class="nav-link" href="chamados.html">Chamados</a>
+      <a class="nav-link" href="relatorios.html">Relatórios</a>
+      <a class="nav-link" href="visitas.html">Visitas</a>
+      <a class="nav-link" href="maquinas.html">Máquinas</a>
+      <a class="nav-link" href="estoque.html">Estoque</a>
+      <a class="nav-link" id="nav-link-usuarios" href="usuarios.html" style="display:none">Usuários</a>
+      <a class="nav-link" id="nav-link-supervisao" href="supervisao.html" style="display:none">Supervisão</a>
+    </nav>
+    <div class="app-user">
+      <span class="nome" id="nav-nome">—</span>
+      <span class="badge" id="nav-papel"></span>
+      <button class="botao-secundario" id="nav-sair">Sair</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <h1>Supervisão do time</h1>
+    <p class="texto-suave" style="margin-top:-14px;margin-bottom:20px;">
+      Acompanhe os relatórios diários e a produtividade de cada técnico.
+    </p>
+
+    <div class="filtros">
+      <select id="filtro-tecnico">
+        <option value="">Todos os técnicos</option>
+      </select>
+      <div class="campo" style="margin:0;">
+        <label style="margin-bottom:2px;">De</label>
+        <input type="date" id="filtro-data-inicio" />
+      </div>
+      <div class="campo" style="margin:0;">
+        <label style="margin-bottom:2px;">Até</label>
+        <input type="date" id="filtro-data-fim" />
+      </div>
+    </div>
+
+    <div class="painel">
+      <h2>Produtividade no período</h2>
+      <div class="tabela-wrapper" style="box-shadow:none;">
+        <table>
+          <thead>
+            <tr>
+              <th>Técnico</th>
+              <th>Chamados resolvidos</th>
+              <th>Relatórios enviados</th>
+            </tr>
+          </thead>
+          <tbody id="tabela-produtividade">
+            <tr><td colspan="3" class="carregando">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="painel">
+      <h2>Relatórios diários no período</h2>
+      <div id="lista-relatorios-supervisao">
+        <p class="carregando">Carregando relatórios...</p>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/supervisao.js"></script>
+</body>
+</html>

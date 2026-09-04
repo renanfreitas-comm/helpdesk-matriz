@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visitas Técnicas — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="logo">
+      <img src="assets/logo-comm.png" alt="Comm" class="logo-principal" />
+      <span class="selo-setor">Tecnologia da Informação</span>
+    </div>
+    <nav class="app-nav">
+      <a class="nav-link" href="dashboard.html">Dashboard</a>
+      <a class="nav-link" href="chamados.html">Chamados</a>
+      <a class="nav-link" href="relatorios.html">Relatórios</a>
+      <a class="nav-link" href="visitas.html">Visitas</a>
+      <a class="nav-link" href="maquinas.html">Máquinas</a>
+      <a class="nav-link" href="estoque.html">Estoque</a>
+      <a class="nav-link" id="nav-link-usuarios" href="usuarios.html" style="display:none">Usuários</a>
+      <a class="nav-link" id="nav-link-supervisao" href="supervisao.html" style="display:none">Supervisão</a>
+    </nav>
+    <div class="app-user">
+      <span class="nome" id="nav-nome">—</span>
+      <span class="badge" id="nav-papel"></span>
+      <button class="botao-secundario" id="nav-sair">Sair</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <h1>Visitas Técnicas</h1>
+      <button class="botao-primario" id="btn-nova-visita">+ Nova visita</button>
+    </div>
+
+    <div class="filtros">
+      <input type="text" id="filtro-busca-visita" placeholder="Buscar por cidade, área ou recurso..." style="max-width:280px;" />
+      <select id="filtro-status-visita">
+        <option value="">Todos os status</option>
+        <option value="agendada">Agendada</option>
+        <option value="realizada">Realizada</option>
+        <option value="cancelada">Cancelada</option>
+      </select>
+      <select id="filtro-empresa-visita">
+        <option value="">Todas as empresas</option>
+        <option value="Equipe Interna">Equipe Interna</option>
+        <option value="FindUp">FindUp</option>
+      </select>
+    </div>
+
+    <div class="tabela-wrapper">
+      <div class="tabela-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Nº</th>
+            <th>Título</th>
+            <th>Recurso Responsável</th>
+            <th>Cidade</th>
+            <th>Data da Visita</th>
+            <th>Área</th>
+            <th>Tipo de Atendimento</th>
+            <th>Status</th>
+            <th>Empresa Responsável</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-visitas">
+          <tr><td colspan="10" class="carregando">Carregando visitas...</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal: nova visita / editar visita -->
+  <div class="modal-fundo" id="modal-visita">
+    <div class="modal" style="max-width:560px;">
+      <h2 id="modal-visita-titulo">Nova visita</h2>
+      <form class="modal-form" id="form-visita">
+        <input type="hidden" id="visita-id" />
+
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="visita-numero">Nº</label>
+            <input type="text" id="visita-numero" placeholder="Ex: 0134" />
+          </div>
+          <div class="campo">
+            <label for="visita-titulo">Título</label>
+            <input type="text" id="visita-titulo" required placeholder="Ex: Instalação de rede" />
+          </div>
+        </div>
+
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="visita-recurso">Recurso Responsável</label>
+            <input type="text" id="visita-recurso" required placeholder="Ex: João Silva" />
+          </div>
+          <div class="campo">
+            <label for="visita-cidade">Cidade</label>
+            <input type="text" id="visita-cidade" placeholder="Ex: São Paulo" />
+          </div>
+        </div>
+
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="visita-data">Data da Visita</label>
+            <input type="date" id="visita-data" required />
+          </div>
+          <div class="campo">
+            <label for="visita-area">Área</label>
+            <input type="text" id="visita-area" placeholder="Ex: Financeiro" />
+          </div>
+        </div>
+
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="visita-tipo">Tipo de Atendimento</label>
+            <select id="visita-tipo">
+              <option value="instalacao">Instalação</option>
+              <option value="manutencao">Manutenção</option>
+              <option value="suporte">Suporte técnico</option>
+              <option value="vistoria">Vistoria/Inspeção</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="visita-status">Status</label>
+            <select id="visita-status">
+              <option value="agendada">Agendada</option>
+              <option value="realizada">Realizada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="visita-empresa">Empresa Responsável</label>
+          <select id="visita-empresa">
+            <option value="Equipe Interna">Equipe Interna</option>
+            <option value="FindUp">FindUp</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+
+        <div class="campo">
+          <label for="visita-observacoes">Observações</label>
+          <textarea id="visita-observacoes" rows="3" placeholder="Observações sobre a visita..."></textarea>
+        </div>
+
+        <p class="erro-msg" id="visita-erro"></p>
+
+        <div class="modal-acoes">
+          <button type="button" class="botao-secundario" id="btn-cancelar-visita">Cancelar</button>
+          <button type="submit" class="botao-primario" id="btn-salvar-visita">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/visitas.js"></script>
+</body>
+</html>

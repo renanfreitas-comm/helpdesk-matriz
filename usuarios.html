@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usuários — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="logo">
+      <img src="assets/logo-comm.png" alt="Comm" class="logo-principal" />
+      <span class="selo-setor">Tecnologia da Informação</span>
+    </div>
+    <nav class="app-nav">
+      <a class="nav-link" href="dashboard.html">Dashboard</a>
+      <a class="nav-link" href="chamados.html">Chamados</a>
+      <a class="nav-link" href="relatorios.html">Relatórios</a>
+      <a class="nav-link" href="visitas.html">Visitas</a>
+      <a class="nav-link" href="maquinas.html">Máquinas</a>
+      <a class="nav-link" href="estoque.html">Estoque</a>
+      <a class="nav-link" id="nav-link-usuarios" href="usuarios.html" style="display:none">Usuários</a>
+      <a class="nav-link" id="nav-link-supervisao" href="supervisao.html" style="display:none">Supervisão</a>
+    </nav>
+    <div class="app-user">
+      <span class="nome" id="nav-nome">—</span>
+      <span class="badge" id="nav-papel"></span>
+      <button class="botao-secundario" id="nav-sair">Sair</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <h1>Usuários do time</h1>
+      <button class="botao-primario" id="btn-novo-usuario">+ Novo usuário</button>
+    </div>
+    <p class="texto-suave" style="margin-top:-14px;margin-bottom:20px;">
+      Não existe cadastro público — só um admin pode criar novas contas por aqui. Você também pode promover um técnico a supervisor/admin ou rebaixar um admin a técnico.
+    </p>
+
+    <div class="tabela-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>E-mail</th>
+            <th>Papel</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-usuarios">
+          <tr><td colspan="4" class="carregando">Carregando usuários...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Modal: novo usuário -->
+  <div class="modal-fundo" id="modal-usuario">
+    <div class="modal">
+      <h2>Novo usuário</h2>
+      <form class="modal-form" id="form-usuario">
+        <div class="campo">
+          <label for="novo-usuario-nome">Nome completo</label>
+          <input type="text" id="novo-usuario-nome" required autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="novo-usuario-email">E-mail</label>
+          <input type="email" id="novo-usuario-email" required autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="novo-usuario-senha">Senha temporária</label>
+          <input type="text" id="novo-usuario-senha" required minlength="6" autocomplete="off" placeholder="Mínimo de 6 caracteres" />
+        </div>
+        <div class="campo">
+          <label for="novo-usuario-papel">Papel</label>
+          <select id="novo-usuario-papel">
+            <option value="tecnico">Técnico</option>
+            <option value="admin">Supervisor/Admin</option>
+          </select>
+        </div>
+
+        <p class="texto-suave" style="font-size:12.5px; margin:0;">
+          Compartilhe o e-mail e a senha temporária com a pessoa por um canal seguro. Ela pode trocar a senha a qualquer momento pelo link "Esqueci minha senha" na tela de login.
+        </p>
+
+        <p class="erro-msg" id="novo-usuario-erro"></p>
+
+        <div class="modal-acoes">
+          <button type="button" class="botao-secundario" id="btn-cancelar-usuario">Cancelar</button>
+          <button type="submit" class="botao-primario" id="btn-salvar-usuario">Criar usuário</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/usuarios.js"></script>
+</body>
+</html>

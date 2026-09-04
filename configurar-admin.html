@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configurar primeiro admin — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div class="auth-wrapper">
+    <div class="auth-conteudo">
+
+      <div class="marca-topo">
+        <img src="assets/logo-comm-branco.png" alt="Comm" />
+        <span class="divisor"></span>
+        <span class="texto"><strong>Ferramentas TI</strong> &bull; Configuração inicial</span>
+      </div>
+
+      <div class="auth-card">
+        <h1>Criar o primeiro admin</h1>
+        <p class="subtitulo">
+          Use esta página <strong>uma única vez</strong>, logo depois de criar seu projeto Firebase
+          e colar as credenciais em <code>js/firebase-config.js</code> (Passos 1 a 4 do README).
+          Ela cria sua conta de acesso e já te cadastra como Supervisor/Admin — sem precisar
+          mexer manualmente no Console do Firebase.
+        </p>
+
+        <form id="form-bootstrap" class="auth-form ativo">
+          <div class="campo">
+            <label for="bootstrap-nome">Nome</label>
+            <input type="text" id="bootstrap-nome" required value="Renan Freitas" />
+          </div>
+          <div class="campo">
+            <label for="bootstrap-email">E-mail</label>
+            <input type="email" id="bootstrap-email" required value="refreitas@commcenter.com.br" readonly />
+            <p class="texto-suave" style="font-size:11.5px; margin:4px 0 0;">
+              Este e-mail é o único autorizado a fazer o bootstrap (definido em <code>firestore.rules</code>).
+              Para usar outro, troque o valor de <code>emailPrimeiroAdmin()</code> nas regras antes de publicá-las.
+            </p>
+          </div>
+          <div class="campo">
+            <label for="bootstrap-senha">Senha</label>
+            <input type="password" id="bootstrap-senha" required minlength="6" value="Ftz!0912" />
+            <label style="display:flex; align-items:center; gap:6px; font-weight:normal; text-transform:none; letter-spacing:normal; margin-top:6px; font-size:12.5px; color:var(--cor-texto-suave);">
+              <input type="checkbox" id="bootstrap-mostrar-senha" style="width:auto;" /> Mostrar senha
+            </label>
+          </div>
+
+          <p class="erro-msg" id="bootstrap-erro"></p>
+          <p id="bootstrap-sucesso" style="display:none; color:var(--cor-resolvido); font-size:13.5px; font-weight:600;"></p>
+
+          <button type="submit" class="botao-primario botao-bloco" id="btn-bootstrap">Criar conta de admin</button>
+        </form>
+
+        <p class="texto-suave" style="text-align:center; font-size:12.5px; margin:20px 0 0;">
+          Já configurou antes? <a href="index.html" style="text-decoration:underline;">Ir para a tela de login</a>.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="js/configurar-admin.js"></script>
+</body>
+</html>
