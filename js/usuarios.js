@@ -96,7 +96,8 @@ function renderizarTabela() {
     if (ultimoAdmin) {
       acao = `<span class="texto-suave" title="Precisa haver pelo menos um admin">Único admin</span>`;
     } else if (u.papel === "admin") {
-      acao = `<button class="botao-secundario btn-rebaixar" data-id="${u.uid}">Tornar técnico</button>`;
+      acao = `<button class="botao-secundario btn-rebaixar" data-id="${u.uid}">Rebaixar a técnico</button>
+              <button class="botao-perigo btn-excluir-usuario" data-id="${u.uid}">Excluir</button>`;
     } else {
       acao = `
         <div class="acoes-tabela">
