@@ -8,6 +8,7 @@ import {
   collection,
   doc,
   updateDoc,
+  deleteDoc,
   onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -97,7 +98,11 @@ function renderizarTabela() {
     } else if (u.papel === "admin") {
       acao = `<button class="botao-secundario btn-rebaixar" data-id="${u.uid}">Tornar técnico</button>`;
     } else {
-      acao = `<button class="botao-secundario btn-promover" data-id="${u.uid}">Tornar admin</button>`;
+      acao = `
+        <div class="acoes-tabela">
+          <button class="botao-secundario btn-promover" data-id="${u.uid}">Tornar admin</button>
+          <button class="botao-perigo btn-excluir-usuario" data-id="${u.uid}">Excluir</button>
+        </div>`;
     }
 
     return `
@@ -113,6 +118,8 @@ function renderizarTabela() {
     b.addEventListener("click", () => alterarPapel(b.dataset.id, "admin")));
   document.querySelectorAll(".btn-rebaixar").forEach((b) =>
     b.addEventListener("click", () => alterarPapel(b.dataset.id, "tecnico")));
+  document.querySelectorAll(".btn-excluir-usuario").forEach((b) =>
+    b.addEventListener("click", () => excluirUsuario(b.dataset.id)));
 }
 
 async function alterarPapel(uid, novoPapel) {
@@ -123,6 +130,19 @@ async function alterarPapel(uid, novoPapel) {
     await updateDoc(doc(db, "usuarios", uid), { papel: novoPapel });
   } catch (err) {
     alert("Erro ao atualizar papel: " + err.message);
+  }
+}
+
+async function excluirUsuario(uid) {
+  const u = listaUsuarios.find((x) => x.uid === uid);
+  const nome = u ? u.nome : "este usuário";
+
+  if (!confirm(`Excluir o técnico ${nome}?\n\nIsso remove o acesso e o perfil dele no sistema. O e-mail dele continuará cadastrado no login (Firebase Authentication) — se quiser liberar totalmente o e-mail, remova-o também em Authentication → Users no Console do Firebase.`)) return;
+
+  try {
+    await deleteDoc(doc(db, "usuarios", uid));
+  } catch (err) {
+    alert("Erro ao excluir usuário: " + err.message);
   }
 }
 
