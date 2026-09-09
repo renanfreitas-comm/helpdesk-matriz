@@ -244,13 +244,19 @@ form.addEventListener("submit", async (evento) => {
     if (arquivo) {
       botao.textContent = "Enviando laudo...";
       const conteudoBase64 = await arquivoParaBase64(arquivo);
-      const resultado = await chamarAppsScript({
+      // O navegador não consegue ler a resposta desta chamada (veja o
+      // comentário em chamarAppsScript), mas ela já deixa o laudo salvo no
+      // Drive. Por isso buscamos o link certo logo depois, separadamente.
+      await chamarAppsScript({
         acao: "uploadLaudo",
         visitaId,
         nomeArquivo: arquivo.name,
         mimeType: arquivo.type,
         conteudoBase64
       });
+
+      botao.textContent = "Confirmando laudo...";
+      const resultado = await buscarLaudoComRetentativa(visitaId);
       if (resultado.erro) throw new Error(resultado.erro);
       laudoUrlFinal = resultado.url;
       await updateDoc(doc(db, "visitas", visitaId), { laudoUrl: laudoUrlFinal, laudoNome: arquivo.name });
@@ -301,16 +307,73 @@ form.addEventListener("submit", async (evento) => {
 // -------------------- Integração com o Google Apps Script (sem custo) ------
 // Guarda o laudo no Drive e dispara os e-mails automáticos. Veja
 // js/apps-script-config.js e apps-script/Codigo.gs.
+//
+// IMPORTANTE: o Google Apps Script não devolve o cabeçalho de CORS que o
+// navegador exige pra LER a resposta de uma chamada feita de outro site —
+// então usamos "mode: no-cors": a ação roda normalmente do lado do Google
+// (o laudo é salvo, o e-mail é enviado), só não conseguimos ler o que ele
+// respondeu. Por isso esta função não devolve nada; quando precisamos ler
+// alguma informação de volta (o link do laudo), usamos
+// buscarLaudoComRetentativa() logo abaixo, que contorna essa limitação
+// com uma tag <script> (técnica conhecida como JSONP).
 async function chamarAppsScript(payload) {
-  const resposta = await fetch(APPS_SCRIPT_URL, {
+  await fetch(APPS_SCRIPT_URL, {
     method: "POST",
-    // Content-Type "text/plain" evita que o navegador mande uma requisição
-    // de "preflight" (OPTIONS) que o Apps Script não responde direito; o
-    // Apps Script lê o corpo cru e dá JSON.parse nele do mesmo jeito.
+    mode: "no-cors",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({ ...payload, token: APPS_SCRIPT_TOKEN })
   });
-  return resposta.json();
+}
+
+// Busca o link do laudo recém-enviado via JSONP (uma tag <script>, que não
+// passa pela restrição de CORS). Tenta algumas vezes com um pequeno
+// intervalo, caso a busca aconteça uma fração de segundo antes de o Google
+// terminar de indexar o arquivo no Drive.
+async function buscarLaudoComRetentativa(visitaId, tentativas = 3) {
+  let ultimoResultado = { erro: "Não foi possível buscar o link do laudo." };
+  for (let i = 0; i < tentativas; i++) {
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+    ultimoResultado = await buscarLaudoViaJsonp(visitaId);
+    if (!ultimoResultado.erro) return ultimoResultado;
+  }
+  return ultimoResultado;
+}
+
+let contadorJsonp = 0;
+function buscarLaudoViaJsonp(visitaId) {
+  return new Promise((resolve) => {
+    const nomeCallback = `__laudoCallback${Date.now()}_${contadorJsonp++}`;
+
+    const limpar = () => {
+      clearTimeout(temporizador);
+      delete window[nomeCallback];
+      script.remove();
+    };
+
+    const temporizador = setTimeout(() => {
+      limpar();
+      resolve({ erro: "Tempo esgotado buscando o link do laudo." });
+    }, 15000);
+
+    window[nomeCallback] = (dados) => {
+      limpar();
+      resolve(dados);
+    };
+
+    const params = new URLSearchParams({
+      acao: "buscarLaudo",
+      visitaId,
+      token: APPS_SCRIPT_TOKEN,
+      callback: nomeCallback
+    });
+    const script = document.createElement("script");
+    script.src = `${APPS_SCRIPT_URL}?${params.toString()}`;
+    script.onerror = () => {
+      limpar();
+      resolve({ erro: "Não foi possível buscar o link do laudo." });
+    };
+    document.body.appendChild(script);
+  });
 }
 
 function arquivoParaBase64(arquivo) {
@@ -325,8 +388,7 @@ function arquivoParaBase64(arquivo) {
 async function enviarAvisoAutomatico({ destinatarios, assunto, corpo }) {
   if (!destinatarios || destinatarios.length === 0) return;
   try {
-    const resultado = await chamarAppsScript({ acao: "enviarEmail", destinatarios, assunto, corpo });
-    if (resultado.erro) console.error("Erro ao enviar e-mail automático:", resultado.erro);
+    await chamarAppsScript({ acao: "enviarEmail", destinatarios, assunto, corpo });
   } catch (err) {
     console.error("Erro ao enviar e-mail automático:", err);
   }
