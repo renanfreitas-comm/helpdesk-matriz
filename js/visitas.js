@@ -4,7 +4,8 @@
 // Qualquer pessoa logada pode registrar uma visita. Só o próprio autor ou
 // um admin pode editar; só admin pode excluir.
 // ==========================================================================
-import { db, storage } from "./firebase-config.js";
+import { db } from "./firebase-config.js";
+import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from "./apps-script-config.js";
 import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
 import {
@@ -19,11 +20,6 @@ import {
   query,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
 let usuarioAtual = null;
 let perfilAtual = null;
@@ -35,7 +31,7 @@ const TIPOS_LAUDO_ACEITOS = [
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ];
-const TAMANHO_MAX_LAUDO = 15 * 1024 * 1024; // 15 MB, mesmo limite do storage.rules
+const TAMANHO_MAX_LAUDO = 15 * 1024 * 1024; // 15 MB — limite razoável para um laudo em PDF/DOCX
 
 const tabelaBody = document.getElementById("tabela-visitas");
 const modal = document.getElementById("modal-visita");
@@ -247,17 +243,26 @@ form.addEventListener("submit", async (evento) => {
 
     if (arquivo) {
       botao.textContent = "Enviando laudo...";
-      const caminho = `laudos/${visitaId}/${Date.now()}-${arquivo.name}`;
-      const referencia = ref(storage, caminho);
-      await uploadBytes(referencia, arquivo, { contentType: arquivo.type });
-      laudoUrlFinal = await getDownloadURL(referencia);
+      const conteudoBase64 = await arquivoParaBase64(arquivo);
+      const resultado = await chamarAppsScript({
+        acao: "uploadLaudo",
+        visitaId,
+        nomeArquivo: arquivo.name,
+        mimeType: arquivo.type,
+        conteudoBase64
+      });
+      if (resultado.erro) throw new Error(resultado.erro);
+      laudoUrlFinal = resultado.url;
       await updateDoc(doc(db, "visitas", visitaId), { laudoUrl: laudoUrlFinal, laudoNome: arquivo.name });
     }
 
     fecharModal();
 
+    // Os avisos por e-mail são automáticos (via Apps Script) — se o envio
+    // falhar por algum motivo, a visita/laudo já foram salvos normalmente,
+    // então só avisamos no console e seguimos, sem travar o usuário.
     if (modoAtual === "criar" && dados.status === "agendada") {
-      avisarPorEmail({
+      enviarAvisoAutomatico({
         destinatarios: listaUsuarios.map((u) => u.email).filter(Boolean),
         assunto: `Nova visita técnica agendada — ${dados.titulo}`,
         corpo:
@@ -268,12 +273,11 @@ form.addEventListener("submit", async (evento) => {
           `Cidade: ${dados.cidade || "—"}\n` +
           `Área: ${dados.area || "—"}\n` +
           `Empresa responsável: ${dados.empresaResponsavel}\n\n` +
-          `Registrado por: ${perfilAtual.nome}`,
-        confirmacao: "Visita registrada! Deseja abrir um e-mail avisando todos os colaboradores agora?"
+          `Registrado por: ${perfilAtual.nome}`
       });
     } else if (dados.status === "realizada" && arquivo) {
       const emailsAdmins = listaUsuarios.filter((u) => u.papel === "admin").map((u) => u.email).filter(Boolean);
-      avisarPorEmail({
+      enviarAvisoAutomatico({
         destinatarios: emailsAdmins,
         assunto: `Laudo da visita técnica realizada — ${dados.titulo}`,
         corpo:
@@ -283,8 +287,7 @@ form.addEventListener("submit", async (evento) => {
           `Data: ${formatarData(dados.data)}\n` +
           `Empresa responsável: ${dados.empresaResponsavel}\n\n` +
           `Link do laudo (${arquivo.name}):\n` +
-          laudoUrlFinal,
-        confirmacao: "Laudo enviado! Deseja abrir um e-mail avisando os administradores agora?"
+          laudoUrlFinal
       });
     }
   } catch (err) {
@@ -295,14 +298,38 @@ form.addEventListener("submit", async (evento) => {
   }
 });
 
-// -------------------- Aviso por e-mail (sem servidor: abre o e-mail já
-// pronto no programa de e-mail da pessoa, que decide se envia) --------------
-function avisarPorEmail({ destinatarios, assunto, corpo, confirmacao }) {
-  if (!destinatarios || destinatarios.length === 0) return;
-  if (!confirm(confirmacao)) return;
+// -------------------- Integração com o Google Apps Script (sem custo) ------
+// Guarda o laudo no Drive e dispara os e-mails automáticos. Veja
+// js/apps-script-config.js e apps-script/Codigo.gs.
+async function chamarAppsScript(payload) {
+  const resposta = await fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    // Content-Type "text/plain" evita que o navegador mande uma requisição
+    // de "preflight" (OPTIONS) que o Apps Script não responde direito; o
+    // Apps Script lê o corpo cru e dá JSON.parse nele do mesmo jeito.
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ ...payload, token: APPS_SCRIPT_TOKEN })
+  });
+  return resposta.json();
+}
 
-  const mailto = `mailto:${destinatarios.join(",")}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
-  window.location.href = mailto;
+function arquivoParaBase64(arquivo) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onload = () => resolve(leitor.result.split(",")[1] || "");
+    leitor.onerror = () => reject(leitor.error);
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+async function enviarAvisoAutomatico({ destinatarios, assunto, corpo }) {
+  if (!destinatarios || destinatarios.length === 0) return;
+  try {
+    const resultado = await chamarAppsScript({ acao: "enviarEmail", destinatarios, assunto, corpo });
+    if (resultado.erro) console.error("Erro ao enviar e-mail automático:", resultado.erro);
+  } catch (err) {
+    console.error("Erro ao enviar e-mail automático:", err);
+  }
 }
 
 async function excluirVisita(id) {
