@@ -16,5 +16,5 @@
 //      usar seu Apps Script).
 // ==========================================================================
 
-export const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwpxqNtIGAjYeVBZZnpASwIToOTCUm-5-YsPtF8XXAnFabwtyQPK3RcIJ65HMm8zZ3pLA/exec";
+export const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz-a1DhINv1L4aBkpxTGi0itYViqpWqF_eIyxU5-HTOpYJGMRLDiusjNXaZ6FVNTco/exec";
 export const APPS_SCRIPT_TOKEN = "CommcenterInfra2026";
