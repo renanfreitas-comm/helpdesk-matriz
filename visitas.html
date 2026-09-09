@@ -65,11 +65,12 @@
             <th>Tipo de Atendimento</th>
             <th>Status</th>
             <th>Empresa Responsável</th>
+            <th>Laudo</th>
             <th>Ações</th>
           </tr>
         </thead>
         <tbody id="tabela-visitas">
-          <tr><td colspan="10" class="carregando">Carregando visitas...</td></tr>
+          <tr><td colspan="11" class="carregando">Carregando visitas...</td></tr>
         </tbody>
       </table>
       </div>
@@ -149,6 +150,12 @@
         <div class="campo">
           <label for="visita-observacoes">Observações</label>
           <textarea id="visita-observacoes" rows="3" placeholder="Observações sobre a visita..."></textarea>
+        </div>
+
+        <div class="campo">
+          <label for="visita-laudo">Laudo (PDF ou DOCX) — obrigatório para marcar como Realizada</label>
+          <input type="file" id="visita-laudo" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+          <p class="texto-suave" id="visita-laudo-atual" style="margin:4px 0 0; font-size:13px;"></p>
         </div>
 
         <p class="erro-msg" id="visita-erro"></p>
