@@ -33,7 +33,10 @@
   <main class="app-main">
     <div class="topo-pagina">
       <h1>Configuração de máquinas</h1>
-      <button class="botao-primario" id="btn-nova-maquina">+ Nova máquina</button>
+      <div style="display:flex; gap:8px;">
+        <button class="botao-secundario" id="btn-exportar-maquinas">Exportar CSV</button>
+        <button class="botao-primario" id="btn-nova-maquina">+ Nova máquina</button>
+      </div>
     </div>
 
     <div class="filtros">
@@ -74,15 +77,15 @@
 
         <div class="linha-dupla">
           <div class="campo">
-            <label for="maquina-nome">Equipamento</label>
-            <input type="text" id="maquina-nome" required placeholder="Ex: Notebook" />
+            <label for="maquina-nome">Nome / Patrimônio</label>
+            <input type="text" id="maquina-nome" required placeholder="Ex: PC-FIN-07" />
           </div>
           <div class="campo">
             <label for="maquina-status">Status</label>
             <select id="maquina-status">
-              <option value="ativa">Configuração</option>
-              <option value="manutencao">Manutenção</option>
-              <option value="baixada">Estoque</option>
+              <option value="ativa">Ativa</option>
+              <option value="manutencao">Em manutenção</option>
+              <option value="baixada">Baixada</option>
             </select>
           </div>
         </div>
@@ -93,36 +96,36 @@
             <input type="text" id="maquina-setor" placeholder="Ex: Financeiro - 2º andar" />
           </div>
           <div class="campo">
-            <label for="maquina-responsavel">Ativo</label>
-            <input type="text" id="maquina-responsavel" placeholder="Ex: Placa de ativo" />
+            <label for="maquina-responsavel">Usuário responsável</label>
+            <input type="text" id="maquina-responsavel" placeholder="Ex: Maria Souza" />
           </div>
         </div>
 
-     <div class="linha-dupla">
+        <div class="linha-dupla">
           <div class="campo">
-            <label for="maquina-so">Serial Number</label>
-            <input type="text" id="maquina-so" placeholder="Ex: PE06NBL1" />
+            <label for="maquina-so">Sistema operacional</label>
+            <input type="text" id="maquina-so" placeholder="Ex: Windows 11 Pro" />
           </div>
           <div class="campo">
-            <label for="maquina-memoria">Tecnico</label>
-            <input type="text" id="maquina-memoria" placeholder=" Tecnico responsavel pela configuração" />
+            <label for="maquina-ip">Endereço IP</label>
+            <input type="text" id="maquina-ip" placeholder="Ex: 192.168.1.45" />
           </div>
         </div>
 
- <div class="linha-dupla">
+        <div class="linha-dupla">
           <div class="campo">
-            <label for="maquina-ip">Chegada</label>
-            <input type="text" id="maquina-ip" placeholder="Ex: 21/08/2026" />
+            <label for="maquina-processador">Processador</label>
+            <input type="text" id="maquina-processador" placeholder="Ex: Intel i5-10400" />
           </div>
           <div class="campo">
-            <label for="maquina-processador">Saida</label>
-            <input type="text" id="maquina-processador" placeholder="Ex: 23/08/2026" />
+            <label for="maquina-memoria">Memória RAM</label>
+            <input type="text" id="maquina-memoria" placeholder="Ex: 16GB" />
           </div>
         </div>
 
         <div class="campo">
-          <label for="maquina-armazenamento">Situação</label>
-          <input type="text" id="maquina-armazenamento" placeholder="Ex: Em configuração" />
+          <label for="maquina-armazenamento">Armazenamento</label>
+          <input type="text" id="maquina-armazenamento" placeholder="Ex: SSD 480GB" />
         </div>
 
         <div class="campo">
