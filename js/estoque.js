@@ -4,6 +4,7 @@
 import { db } from "./firebase-config.js";
 import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
+import { exportarCSV, nomeArquivoComData } from "./csv-utils.js";
 import {
   collection,
   addDoc,
@@ -80,11 +81,11 @@ function observarItens() {
   });
 }
 
-function renderizarTabela() {
+function obterListaFiltrada() {
   const busca = document.getElementById("filtro-busca-item").value.trim().toLowerCase();
   const fSituacao = document.getElementById("filtro-situacao").value;
 
-  const filtrados = listaItens.filter((i) => {
+  return listaItens.filter((i) => {
     if (fSituacao && i.situacao !== fSituacao) return false;
     if (busca) {
       const alvo = `${i.equipamento || ""} ${i.serial || ""} ${i.ativo || ""} ${i.lojaSetor || ""}`.toLowerCase();
@@ -92,6 +93,10 @@ function renderizarTabela() {
     }
     return true;
   });
+}
+
+function renderizarTabela() {
+  const filtrados = obterListaFiltrada();
 
   if (filtrados.length === 0) {
     tabelaBody.innerHTML = `<tr><td colspan="11" class="vazio">Nenhum item encontrado.</td></tr>`;
@@ -127,6 +132,31 @@ function renderizarTabela() {
 
 document.getElementById("filtro-busca-item").addEventListener("input", renderizarTabela);
 document.getElementById("filtro-situacao").addEventListener("change", renderizarTabela);
+
+// -------------------- Exportar CSV --------------------
+// Exporta exatamente o que está sendo mostrado na tela (respeita os
+// filtros/busca ativos no momento).
+document.getElementById("btn-exportar-estoque").addEventListener("click", () => {
+  const cabecalhos = [
+    "Equipamento", "S/N", "Ativo", "Chegada", "Delegação", "Prioridade",
+    "Saída", "Técnico", "Loja/Setor", "Situação"
+  ];
+
+  const linhas = obterListaFiltrada().map((i) => [
+    i.equipamento || "",
+    i.serial || "",
+    i.ativo || "",
+    formatarDataSimples(i.chegada),
+    i.delegacao || "",
+    ROTULOS_PRIORIDADE[i.prioridade] || "",
+    formatarDataSimples(i.saida),
+    i.tecnicoNome || "",
+    i.lojaSetor || "",
+    ROTULOS_SITUACAO[i.situacao] || i.situacao || ""
+  ]);
+
+  exportarCSV(nomeArquivoComData("estoque"), cabecalhos, linhas);
+});
 
 // -------------------- Modal --------------------
 let modoAtual = "criar";
@@ -241,6 +271,14 @@ function escaparHTML(texto) {
 
 function formatarData(iso) {
   if (!iso) return '<span class="texto-suave">—</span>';
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+// Igual a formatarData, mas devolve texto puro (sem HTML) — usada no
+// export CSV, onde não faz sentido ter uma tag <span> dentro da célula.
+function formatarDataSimples(iso) {
+  if (!iso) return "";
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
 }
