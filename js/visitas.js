@@ -8,6 +8,7 @@ import { db } from "./firebase-config.js";
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from "./apps-script-config.js";
 import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
+import { exportarCSV, nomeArquivoComData } from "./csv-utils.js";
 import {
   collection,
   addDoc,
@@ -70,12 +71,12 @@ function observarVisitas() {
   });
 }
 
-function renderizarTabela() {
+function obterListaFiltrada() {
   const busca = document.getElementById("filtro-busca-visita").value.trim().toLowerCase();
   const fStatus = document.getElementById("filtro-status-visita").value;
   const fEmpresa = document.getElementById("filtro-empresa-visita").value;
 
-  const filtradas = listaVisitas.filter((v) => {
+  return listaVisitas.filter((v) => {
     if (fStatus && v.status !== fStatus) return false;
     if (fEmpresa && v.empresaResponsavel !== fEmpresa) return false;
     if (busca) {
@@ -84,6 +85,10 @@ function renderizarTabela() {
     }
     return true;
   });
+}
+
+function renderizarTabela() {
+  const filtradas = obterListaFiltrada();
 
   if (filtradas.length === 0) {
     tabelaBody.innerHTML = `<tr><td colspan="11" class="vazio">Nenhuma visita encontrada.</td></tr>`;
@@ -129,6 +134,33 @@ function renderizarTabela() {
   document.getElementById(id).addEventListener("change", renderizarTabela);
 });
 document.getElementById("filtro-busca-visita").addEventListener("input", renderizarTabela);
+
+// -------------------- Exportar CSV --------------------
+// Exporta exatamente o que está sendo mostrado na tela (respeita os
+// filtros/busca ativos no momento).
+document.getElementById("btn-exportar-visitas").addEventListener("click", () => {
+  const cabecalhos = [
+    "Número", "Título", "Recurso Responsável", "Cidade", "Data da Visita", "Área",
+    "Tipo de Atendimento", "Status", "Empresa Responsável", "Observações", "Link do Laudo", "Registrado por"
+  ];
+
+  const linhas = obterListaFiltrada().map((v) => [
+    v.numero || "",
+    v.titulo || "",
+    v.recursoResponsavel || "",
+    v.cidade || "",
+    formatarData(v.data),
+    v.area || "",
+    ROTULOS_TIPO[v.tipoAtendimento] || v.tipoAtendimento || "",
+    ROTULOS_STATUS[v.status] || v.status || "",
+    v.empresaResponsavel || "",
+    v.observacoes || "",
+    v.laudoUrl || "",
+    v.criadoPorNome || ""
+  ]);
+
+  exportarCSV(nomeArquivoComData("visitas"), cabecalhos, linhas);
+});
 
 // -------------------- Modal --------------------
 let modoAtual = "criar";
