@@ -100,8 +100,8 @@ document.getElementById("filtro-busca-maquina").addEventListener("input", render
 // no CSV (fica só dentro dos detalhes de cada máquina no site).
 document.getElementById("btn-exportar-maquinas").addEventListener("click", () => {
   const cabecalhos = [
-    "Nome / Patrimônio", "Setor", "Responsável", "Status", "Sistema Operacional",
-    "IP", "Processador", "Memória RAM", "Armazenamento", "Observações"
+    "Equipamento", "S/N", "Ativo", "Status", "Setor",
+    "Chamado", "Chegada", "Saida", "Situação", "Observações"
   ];
 
   const linhas = obterListaFiltrada().map((m) => [
