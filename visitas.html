@@ -33,7 +33,10 @@
   <main class="app-main">
     <div class="topo-pagina">
       <h1>Visitas Técnicas</h1>
-      <button class="botao-primario" id="btn-nova-visita">+ Nova visita</button>
+      <div style="display:flex; gap:8px;">
+        <button class="botao-secundario" id="btn-exportar-visitas">Exportar CSV</button>
+        <button class="botao-primario" id="btn-nova-visita">+ Nova visita</button>
+      </div>
     </div>
 
     <div class="filtros">
@@ -78,7 +81,7 @@
   </main>
 
   <!-- Modal: nova visita / editar visita -->
-  <div class="modal-fundo" id="modal-visita">
+   <div class="modal-fundo" id="modal-visita">
     <div class="modal" style="max-width:560px;">
       <h2 id="modal-visita-titulo">Nova visita</h2>
       <form class="modal-form" id="form-visita">
@@ -157,6 +160,7 @@
           <input type="file" id="visita-laudo" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
           <p class="texto-suave" id="visita-laudo-atual" style="margin:4px 0 0; font-size:13px;"></p>
         </div>
+
 
         <p class="erro-msg" id="visita-erro"></p>
 
