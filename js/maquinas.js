@@ -27,7 +27,7 @@ const modal = document.getElementById("modal-maquina");
 const form = document.getElementById("form-maquina");
 const blocoHistorico = document.getElementById("bloco-historico");
 
-const ROTULOS_STATUS = { ativa: "Ativa", manutencao: "Em manutenção", baixada: "Baixada", entregue: "Entregue"  };
+const ROTULOS_STATUS = { ativa: "Configuração", manutencao: "Manutenção", baixada: "Estoque", entregue: "Entregue"  };
 const CLASSES_STATUS = { ativa: "badge-status-resolvido", manutencao: "badge-status-andamento", baixada: "badge-status-aberto" };
 
 protegerPagina((user, perfil) => {
@@ -128,7 +128,7 @@ document.getElementById("btn-nova-maquina").addEventListener("click", () => abri
 document.getElementById("btn-cancelar-maquina").addEventListener("click", fecharModal);
 modal.addEventListener("click", (e) => { if (e.target === modal) fecharModal(); });
 
-const CAMPOS = ["nome", "setor", "responsavel", "status", "so", "ip", "processador", "memoria", "armazenamento", "observacoes"];
+const CAMPOS = ["Equipamento", "S/N", "Ativo", "Status", "Setoe", "Chamado", "Chegada", "Saida", "Situação", "observacoes"];
 
 function abrirModal(modo, maquinaId = null) {
   modoAtual = modo;
@@ -146,7 +146,7 @@ function abrirModal(modo, maquinaId = null) {
     document.getElementById("maquina-nome").value = m.nome || "";
     document.getElementById("maquina-setor").value = m.setor || "";
     document.getElementById("maquina-responsavel").value = m.responsavelUso || "";
-    document.getElementById("maquina-status").value = m.status || "ativa";
+    document.getElementById("maquina-status").value = m.status || "";
     document.getElementById("maquina-so").value = m.so || "";
     document.getElementById("maquina-ip").value = m.ip || "";
     document.getElementById("maquina-processador").value = m.processador || "";
