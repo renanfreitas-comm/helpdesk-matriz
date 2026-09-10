@@ -27,7 +27,7 @@ const modal = document.getElementById("modal-maquina");
 const form = document.getElementById("form-maquina");
 const blocoHistorico = document.getElementById("bloco-historico");
 
-const ROTULOS_STATUS = { ativa: "Ativa", manutencao: "Em manutenção", baixada: "Baixada" };
+const ROTULOS_STATUS = { ativa: "Ativa", manutencao: "Em manutenção", baixada: "Baixada", entregue: "Entregue"  };
 const CLASSES_STATUS = { ativa: "badge-status-resolvido", manutencao: "badge-status-andamento", baixada: "badge-status-aberto" };
 
 protegerPagina((user, perfil) => {
