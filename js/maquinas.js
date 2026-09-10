@@ -4,6 +4,7 @@
 import { db } from "./firebase-config.js";
 import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
+import { exportarCSV, nomeArquivoComData } from "./csv-utils.js";
 import {
   collection,
   addDoc,
@@ -46,11 +47,11 @@ function observarMaquinas() {
   });
 }
 
-function renderizarTabela() {
+function obterListaFiltrada() {
   const fStatus = document.getElementById("filtro-status-maquina").value;
   const busca = document.getElementById("filtro-busca-maquina").value.trim().toLowerCase();
 
-  const filtradas = listaMaquinas.filter((m) => {
+  return listaMaquinas.filter((m) => {
     if (fStatus && m.status !== fStatus) return false;
     if (busca) {
       const alvo = `${m.nome || ""} ${m.setor || ""} ${m.responsavelUso || ""}`.toLowerCase();
@@ -58,6 +59,10 @@ function renderizarTabela() {
     }
     return true;
   });
+}
+
+function renderizarTabela() {
+  const filtradas = obterListaFiltrada();
 
   if (filtradas.length === 0) {
     tabelaBody.innerHTML = `<tr><td colspan="6" class="vazio">Nenhuma máquina encontrada.</td></tr>`;
@@ -88,6 +93,32 @@ function renderizarTabela() {
 
 ["filtro-status-maquina"].forEach((id) => document.getElementById(id).addEventListener("change", renderizarTabela));
 document.getElementById("filtro-busca-maquina").addEventListener("input", renderizarTabela);
+
+// -------------------- Exportar CSV --------------------
+// Exporta exatamente o que está sendo mostrado na tela (respeita os
+// filtros/busca ativos no momento). O histórico de manutenções não entra
+// no CSV (fica só dentro dos detalhes de cada máquina no site).
+document.getElementById("btn-exportar-maquinas").addEventListener("click", () => {
+  const cabecalhos = [
+    "Nome / Patrimônio", "Setor", "Responsável", "Status", "Sistema Operacional",
+    "IP", "Processador", "Memória RAM", "Armazenamento", "Observações"
+  ];
+
+  const linhas = obterListaFiltrada().map((m) => [
+    m.nome || "",
+    m.setor || "",
+    m.responsavelUso || "",
+    ROTULOS_STATUS[m.status] || m.status || "",
+    m.so || "",
+    m.ip || "",
+    m.processador || "",
+    m.memoriaRam || "",
+    m.armazenamento || "",
+    m.observacoes || ""
+  ]);
+
+  exportarCSV(nomeArquivoComData("maquinas"), cabecalhos, linhas);
+});
 
 // -------------------- Modal --------------------
 let modoAtual = "criar";
