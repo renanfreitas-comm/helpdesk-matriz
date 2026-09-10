@@ -76,9 +76,9 @@ function renderizarTabela() {
       <td>${escaparHTML(m.responsavelUso || "—")}</td>
       <td>${escaparHTML(m.so || "—")}</td>
       <td>${escaparHTML(m.ip || "—")}</td>
-      <td><span class="badge ${CLASSES_STATUS[m.status] || ""}">${ROTULOS_STATUS[m.status] || m.status}</span></td>
       <td>${escaparHTML(m.processador || "—")}</td>
       <td>${escaparHTML(m.memoriaRam || "—")}</td>
+      <td><span class="badge ${CLASSES_STATUS[m.status] || ""}">${ROTULOS_STATUS[m.status] || m.status}</span></td>
       <td>
         <div class="acoes-tabela">
           <button class="botao-secundario btn-detalhes-maquina" data-id="${m.id}">Detalhes</button>
