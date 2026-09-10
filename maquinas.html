@@ -77,55 +77,60 @@
 
         <div class="linha-dupla">
           <div class="campo">
-            <label for="maquina-nome">Nome / Patrimônio</label>
+            <label for="maquina-nome">Equipamento</label>
             <input type="text" id="maquina-nome" required placeholder="Ex: PC-FIN-07" />
           </div>
           <div class="campo">
-            <label for="maquina-status">Status</label>
+            <label for="maquina-status">Delegação</label>
             <select id="maquina-status">
-              <option value="ativa">Ativa</option>
-              <option value="manutencao">Em manutenção</option>
-              <option value="baixada">Baixada</option>
+              <option value="ativa">Configuração</option>
+              <option value="manutencao">Manutenção</option>
+              <option value="baixada">Estoque</option>
             </select>
           </div>
         </div>
 
         <div class="linha-dupla">
           <div class="campo">
-            <label for="maquina-setor">Setor / Localização</label>
-            <input type="text" id="maquina-setor" placeholder="Ex: Financeiro - 2º andar" />
+            <label for="maquina-setor">Serial Number</label>
+            <input type="text" id="maquina-setor" placeholder="Ex: PE06BLHD" />
           </div>
           <div class="campo">
-            <label for="maquina-responsavel">Usuário responsável</label>
-            <input type="text" id="maquina-responsavel" placeholder="Ex: Maria Souza" />
-          </div>
-        </div>
-
-        <div class="linha-dupla">
-          <div class="campo">
-            <label for="maquina-so">Sistema operacional</label>
-            <input type="text" id="maquina-so" placeholder="Ex: Windows 11 Pro" />
-          </div>
-          <div class="campo">
-            <label for="maquina-ip">Endereço IP</label>
-            <input type="text" id="maquina-ip" placeholder="Ex: 192.168.1.45" />
+            <label for="maquina-responsavel">Ativo / Patrimonio</label>
+            <input type="text" id="maquina-responsavel" placeholder="Ex: 000000" />
           </div>
         </div>
 
         <div class="linha-dupla">
           <div class="campo">
-            <label for="maquina-processador">Processador</label>
-            <input type="text" id="maquina-processador" placeholder="Ex: Intel i5-10400" />
+            <label for="maquina-so">Setor Destino</label>
+            <input type="text" id="maquina-so" placeholder="Ex: TI" />
           </div>
           <div class="campo">
-            <label for="maquina-memoria">Memória RAM</label>
-            <input type="text" id="maquina-memoria" placeholder="Ex: 16GB" />
+            <label for="maquina-ip">Chamado </label>
+            <input type="text" id="maquina-ip" placeholder="Ex: 1234567" />
+          </div>
+        </div>
+
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="maquina-processador">Chegada</label>
+            <input type="text" id="maquina-processador" placeholder="Ex: 21/08/2026" />
+          </div>
+          <div class="campo">
+            <label for="maquina-memoria">Saida</label>
+            <input type="text" id="maquina-memoria" placeholder="Ex: 22/08/2026" />
           </div>
         </div>
 
         <div class="campo">
-          <label for="maquina-armazenamento">Armazenamento</label>
+          <label for="maquina-armazenamento">Situação</label>
           <input type="text" id="maquina-armazenamento" placeholder="Ex: SSD 480GB" />
+          <select id="maquina-armazenamento">
+              <option value="ativa">Em configuração</option>
+              <option value="manutencao">Em manutenção</option>
+              <option value="baixada">Direcionada ao estoque</option>
+            </select>
         </div>
 
         <div class="campo">
