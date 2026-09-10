@@ -100,7 +100,7 @@ document.getElementById("filtro-busca-maquina").addEventListener("input", render
 // no CSV (fica só dentro dos detalhes de cada máquina no site).
 document.getElementById("btn-exportar-maquinas").addEventListener("click", () => {
   const cabecalhos = [
-    "Equipamento", "S/N", "Ativo", "Status", "Setor",
+    "Equipamento", "S/N", "Ativo", "Delegação", "Setor",
     "Chamado", "Chegada", "Saida", "Situação", "Observações"
   ];
 
@@ -128,7 +128,7 @@ document.getElementById("btn-nova-maquina").addEventListener("click", () => abri
 document.getElementById("btn-cancelar-maquina").addEventListener("click", fecharModal);
 modal.addEventListener("click", (e) => { if (e.target === modal) fecharModal(); });
 
-const CAMPOS = ["Equipamento", "S/N", "Ativo", "Status", "Setoe", "Chamado", "Chegada", "Saida", "Situação", "observacoes"];
+const CAMPOS = ["Equipamento", "S/N", "Ativo", "Delegação", "Setoe", "Chamado", "Chegada", "Saida", "Situação", "observacoes"];
 
 function abrirModal(modo, maquinaId = null) {
   modoAtual = modo;
