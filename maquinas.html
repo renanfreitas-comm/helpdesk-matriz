@@ -148,7 +148,16 @@
           <button type="submit" class="botao-primario" id="btn-salvar-maquina">Salvar</button>
         </div>
       </form>
-
+      
+  <!-- Enviar ao estoque: só aparece ao editar uma máquina já existente -->
+      <div id="bloco-enviar-estoque" style="display:none; margin-top:24px; border-top:1px solid var(--cor-borda); padding-top:20px;">
+        <h2>Estoque</h2>
+        <p class="texto-suave" style="margin:-4px 0 12px; font-size:13px;">
+          Cria um item novo na tela de Estoque já com os dados desta máquina preenchidos (equipamento, setor e observações). O restante (S/N, técnico responsável etc.) você completa por lá.
+        </p>
+        <button type="button" class="botao-secundario" id="btn-enviar-estoque">Enviar ao estoque</button>
+      </div>
+      
       <!-- Histórico de manutenções: só aparece ao editar uma máquina já existente -->
       <div id="bloco-historico" style="display:none; margin-top:24px; border-top:1px solid var(--cor-borda); padding-top:20px;">
         <h2>Histórico de manutenções</h2>
