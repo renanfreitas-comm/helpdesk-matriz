@@ -220,6 +220,78 @@ async function excluirMaquina(id) {
     alert("Erro ao excluir: " + err.message);
   }
 }
+// -------------------- Enviar ao estoque --------------------
+// Cria um item novo em Estoque já preenchido com os dados desta máquina.
+// Não mexe no status da máquina (ela continua Ativa/Manutenção/Baixada
+// normalmente) — é só uma cópia inicial dos dados pro Estoque.
+document.getElementById("btn-enviar-estoque").addEventListener("click", async () => {
+  const m = listaMaquinas.find((x) => x.id === maquinaIdAtual);
+  if (!m) return;
+
+  if (!confirm(`Enviar "${m.nome}" para o Estoque? Um novo item será criado lá com os dados desta máquina já preenchidos.`)) return;
+
+  const botao = document.getElementById("btn-enviar-estoque");
+  botao.disabled = true;
+  botao.textContent = "Enviando...";
+
+  try {
+    // Tenta casar o "usuário responsável" da máquina (texto livre) com um
+    // usuário cadastrado do mesmo nome, pra já vincular o técnico no
+    // Estoque também. Se não achar, deixa o campo em branco (dá pra
+    // escolher manualmente na tela de Estoque).
+    let tecnicoUid = null;
+    let tecnicoNome = null;
+    if (m.responsavelUso) {
+      const snap = await getDocs(collection(db, "usuarios"));
+      const usuarios = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+      const encontrado = usuarios.find(
+        (u) => (u.nome || "").trim().toLowerCase() === m.responsavelUso.trim().toLowerCase()
+      );
+      if (encontrado) {
+        tecnicoUid = encontrado.uid;
+        tecnicoNome = encontrado.nome;
+      }
+    }
+
+    const observacoes = [
+      `Enviado do módulo de Máquinas em ${new Date().toLocaleDateString("pt-BR")} por ${perfilAtual.nome}.`,
+      m.observacoes ? `Observações da máquina: ${m.observacoes}` : ""
+    ].filter(Boolean).join(" ");
+
+    await addDoc(collection(db, "itensEstoque"), {
+      equipamento: m.nome || "",
+      serial: "",
+      ativo: m.nome || "",
+      chegada: hojeISO(),
+      saida: "",
+      delegacao: "",
+      lojaSetor: m.setor || "",
+      prioridade: "media",
+      tecnicoUid,
+      tecnicoNome,
+      situacao: "recebido",
+      observacoes,
+      criadoPorUid: usuarioAtual.uid,
+      criadoPorNome: perfilAtual.nome,
+      criadoEm: serverTimestamp(),
+      atualizadoEm: serverTimestamp()
+    });
+
+    alert("Item criado no Estoque com os dados desta máquina! Abra a tela Estoque para completar o restante (S/N, técnico responsável etc.).");
+  } catch (err) {
+    alert("Erro ao enviar ao estoque: " + err.message);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Enviar ao estoque";
+  }
+});
+
+function hojeISO() {
+  const hoje = new Date();
+  const offset = hoje.getTimezoneOffset();
+  const local = new Date(hoje.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 10);
+}
 
 // -------------------- Histórico de manutenções --------------------
 function observarHistorico(maquinaId) {
