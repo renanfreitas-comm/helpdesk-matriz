@@ -180,6 +180,33 @@ document.getElementById("btn-limpar-filtro").addEventListener("click", () => {
   renderizarLista();
 });
 
+// -------------------- Exportar CSV --------------------
+// Exporta exatamente o que está sendo mostrado na tela (respeita o filtro
+// de data e, para admin, o filtro por técnico). Cada linha do CSV é uma
+// atividade — como um relatório pode ter várias atividades, a data, o
+// técnico e o resumo do dia se repetem em cada linha do mesmo relatório.
+document.getElementById("btn-exportar-relatorios").addEventListener("click", () => {
+  const cabecalhos = ["Data", "Técnico", "Categoria", "Atividade", "Quantidade / Área", "Status", "Resumo do dia"];
+
+  const linhas = [];
+  obterListaFiltrada().forEach((r) => {
+    const atividades = r.atividades && r.atividades.length > 0 ? r.atividades : [{}];
+    atividades.forEach((a) => {
+      linhas.push([
+        formatarData(r.data),
+        r.tecnicoNome || "",
+        a.categoria || "",
+        a.atividade || "",
+        a.quantidadeArea || "",
+        ROTULOS_STATUS_ATIVIDADE[a.status] || a.status || "",
+        r.resumo || ""
+      ]);
+    });
+  });
+
+  exportarCSV(nomeArquivoComData("relatorios"), cabecalhos, linhas);
+});
+
 // -------------------- Modal --------------------
 let modoAtual = "criar";
 
