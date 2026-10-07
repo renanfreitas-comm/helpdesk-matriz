@@ -1,0 +1,14 @@
+# Dados sensíveis que nunca devem ir para o GitHub
+ADMIN-INICIAL-NAO-SUBIR.txt
+*.local.txt
+migracao/config.json
+migracao/chave-firebase.json
+migracao/*.json.key
+migracao/senhas-temporarias.csv
+migracao/node_modules/
+
+# Ferramentas
+node_modules/
+supabase/.temp/
+.DS_Store
+Thumbs.db
