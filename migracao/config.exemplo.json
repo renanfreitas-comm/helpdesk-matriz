@@ -1,0 +1,5 @@
+{
+  "arquivoChaveFirebase": "./chave-firebase.json",
+  "supabaseUrl": "COLE_AQUI_A_PROJECT_URL",
+  "supabaseServiceRoleKey": "COLE_AQUI_A_SERVICE_ROLE_KEY"
+}

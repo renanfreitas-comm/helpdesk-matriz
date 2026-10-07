@@ -1,0 +1,14 @@
+{
+  "name": "helpdesk-matriz-migracao",
+  "private": true,
+  "type": "module",
+  "description": "Copia os dados do Firebase para o Supabase (rodar uma vez).",
+  "scripts": {
+    "simular": "node migrar.mjs",
+    "migrar": "node migrar.mjs --gravar"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
+    "firebase-admin": "^14.5.0"
+  }
+}
