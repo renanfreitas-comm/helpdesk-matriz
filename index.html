@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Help Desk Matriz — Entrar</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div class="auth-wrapper">
+    <div class="auth-conteudo">
+
+      <div class="marca-topo">
+        <img src="assets/logo-comm-branco.png" alt="Comm" />
+        <span class="divisor"></span>
+        <span class="texto"><strong>Ferramentas TI</strong> &bull; Help Desk Matriz</span>
+      </div>
+
+      <div class="auth-card">
+        <h1>Acesso restrito</h1>
+        <p class="subtitulo">Entre com seu e-mail e senha cadastrados para acessar as ferramentas da TI.</p>
+
+        <!-- LOGIN -->
+        <form id="form-login" class="auth-form ativo">
+          <div class="campo">
+            <label for="login-email">E-mail</label>
+            <input type="email" id="login-email" required autocomplete="email" />
+          </div>
+          <div class="campo">
+            <label for="login-senha">Senha</label>
+            <input type="password" id="login-senha" required autocomplete="current-password" />
+          </div>
+          <p class="erro-msg" id="login-erro"></p>
+          <button type="submit" class="botao-primario botao-bloco">Entrar</button>
+          <p style="text-align:center; margin:4px 0 0;">
+            <a href="#" id="link-esqueci-senha" style="font-size:13px; color:var(--cor-texto-suave); text-decoration:underline;">Esqueci minha senha</a>
+          </p>
+        </form>
+
+        <p class="texto-suave" style="text-align:center; font-size:12.5px; margin:20px 0 0;">
+          Não tem conta? Peça ao seu supervisor para te cadastrar na plataforma.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="js/index.js"></script>
+</body>
+</html>
