@@ -17,6 +17,8 @@
 --       - excluir chamados, máquinas, estoque e visitas: só admin.
 --   * Gatilhos que preenchem sozinhos quem criou, quando criou, quando
 --     atualizou e quando o chamado foi resolvido (não dá para falsificar).
+--   * A linha do tempo de cada chamado (chamado_eventos): abertura,
+--     mudanças de status/responsável e comentários dos técnicos.
 --   * O "bucket" privado "laudos" (Storage) para os laudos das visitas.
 --   * A publicação Realtime, para as telas se atualizarem sozinhas.
 -- ==========================================================================
@@ -112,9 +114,9 @@ begin
     new.criado_por_nome := public.meu_nome();
     new.criado_em := now();
     new.atualizado_em := now();
-    -- Técnico abre sempre como "aberto" e sem responsável.
-    if not public.eh_admin() then
-      new.status := 'aberto';
+    -- Técnico pode abrir o chamado sem responsável ou já para si mesmo
+    -- (o caso mais comum: ele mesmo vai atender). Nunca para outra pessoa.
+    if not public.eh_admin() and new.responsavel_uid is distinct from auth.uid() then
       new.responsavel_uid := null;
     end if;
     new.resolvido_em := case when new.status = 'resolvido' then now() end;
@@ -124,12 +126,20 @@ begin
     new.criado_por_nome := old.criado_por_nome;
     new.criado_em := old.criado_em;
     new.atualizado_em := now();
-    -- Técnico (responsável) só pode mudar o status.
-    if not public.eh_admin()
-       and (new.numero, new.area, new.atividade, new.prioridade, new.responsavel_uid)
-           is distinct from
-           (old.numero, old.area, old.atividade, old.prioridade, old.responsavel_uid) then
-      raise exception 'Técnicos só podem alterar o status do chamado.' using errcode = '42501';
+    -- Técnico: só muda o status dos chamados dele, ou "assume" um chamado
+    -- sem responsável (colocando a si mesmo como responsável).
+    if not public.eh_admin() then
+      if (new.numero, new.area, new.atividade, new.prioridade)
+         is distinct from (old.numero, old.area, old.atividade, old.prioridade) then
+        raise exception 'Técnicos só podem alterar o status do chamado.' using errcode = '42501';
+      end if;
+      if new.responsavel_uid is distinct from old.responsavel_uid
+         and not (old.responsavel_uid is null and new.responsavel_uid = auth.uid()) then
+        raise exception 'Você só pode assumir chamados que estão sem responsável.' using errcode = '42501';
+      end if;
+      if old.responsavel_uid is null and new.responsavel_uid is null then
+        raise exception 'Assuma o chamado antes de mudar o status.' using errcode = '42501';
+      end if;
     end if;
     -- Data de resolução: gravada na transição para "resolvido", limpa ao reabrir.
     if new.status = 'resolvido' and old.status <> 'resolvido' then
@@ -150,6 +160,77 @@ end $$;
 drop trigger if exists chamados_regras on public.chamados;
 create trigger chamados_regras before insert or update on public.chamados
   for each row execute function public.tg_chamados();
+
+-- Linha do tempo do chamado: eventos automáticos + comentários.
+create table if not exists public.chamado_eventos (
+  id          bigint generated always as identity primary key,
+  chamado_id  text not null references public.chamados (id) on delete cascade,
+  tipo        text not null check (tipo in ('criacao', 'status', 'atribuicao', 'edicao', 'comentario')),
+  texto       text not null default '' check (char_length(texto) <= 2000),
+  autor_uid   uuid,
+  autor_nome  text,
+  criado_em   timestamptz not null default now()
+);
+create index if not exists chamado_eventos_chamado_idx on public.chamado_eventos (chamado_id, criado_em);
+
+-- Comentários: autor e data sempre de quem está logado.
+create or replace function public.tg_chamado_eventos()
+returns trigger language plpgsql as $$
+begin
+  if auth.uid() is not null then
+    new.autor_uid := auth.uid();
+    new.autor_nome := public.meu_nome();
+    new.criado_em := now();
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists chamado_eventos_autor on public.chamado_eventos;
+create trigger chamado_eventos_autor before insert on public.chamado_eventos
+  for each row execute function public.tg_chamado_eventos();
+
+-- Registra sozinho na linha do tempo o que mudou no chamado.
+-- (security definer: grava o evento mesmo sem permissão direta na tabela.)
+create or replace function public.tg_chamados_historico()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  rotulo jsonb := '{"aberto":"Aberto","andamento":"Em andamento","resolvido":"Resolvido"}';
+begin
+  if auth.uid() is null then return null; end if;  -- migração/SQL Editor: sem eventos
+
+  if tg_op = 'INSERT' then
+    insert into chamado_eventos (chamado_id, tipo, texto, autor_uid, autor_nome)
+    values (new.id, 'criacao',
+            'Chamado aberto' || coalesce(' — responsável: ' || new.responsavel_nome, ''),
+            auth.uid(), meu_nome());
+    return null;
+  end if;
+
+  if new.responsavel_uid is distinct from old.responsavel_uid then
+    insert into chamado_eventos (chamado_id, tipo, texto, autor_uid, autor_nome)
+    values (new.id, 'atribuicao',
+            case when new.responsavel_uid is null then 'Responsável removido'
+                 when new.responsavel_uid = auth.uid() and old.responsavel_uid is null then 'Assumiu o chamado'
+                 else 'Atribuído a ' || coalesce(new.responsavel_nome, '—') end,
+            auth.uid(), meu_nome());
+  end if;
+  if new.status is distinct from old.status then
+    insert into chamado_eventos (chamado_id, tipo, texto, autor_uid, autor_nome)
+    values (new.id, 'status',
+            'Status: ' || (rotulo ->> old.status) || ' → ' || (rotulo ->> new.status),
+            auth.uid(), meu_nome());
+  end if;
+  if (new.numero, new.area, new.atividade, new.prioridade)
+     is distinct from (old.numero, old.area, old.atividade, old.prioridade) then
+    insert into chamado_eventos (chamado_id, tipo, texto, autor_uid, autor_nome)
+    values (new.id, 'edicao', 'Dados do chamado editados', auth.uid(), meu_nome());
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists chamados_historico on public.chamados;
+create trigger chamados_historico after insert or update on public.chamados
+  for each row execute function public.tg_chamados_historico();
 
 -- ------------------------------------------------------------- RELATÓRIOS
 create table if not exists public.relatorios (
@@ -351,6 +432,7 @@ $$;
 -- ===================================================== REGRAS DE ACESSO (RLS)
 alter table public.usuarios          enable row level security;
 alter table public.chamados          enable row level security;
+alter table public.chamado_eventos   enable row level security;
 alter table public.relatorios        enable row level security;
 alter table public.maquinas          enable row level security;
 alter table public.maquina_historico enable row level security;
@@ -383,9 +465,19 @@ create policy chamados_ler on public.chamados for select to authenticated
 create policy chamados_criar on public.chamados for insert to authenticated
   with check ((select public.eh_membro()));
 create policy chamados_editar on public.chamados for update to authenticated
-  using ((select public.eh_admin()) or (responsavel_uid = auth.uid() and (select public.eh_membro())))
+  using ((select public.eh_admin())
+         or ((responsavel_uid = auth.uid() or responsavel_uid is null) and (select public.eh_membro())))
   with check ((select public.eh_membro()));
 create policy chamados_excluir on public.chamados for delete to authenticated
+  using ((select public.eh_admin()));
+
+-- chamado_eventos: todos do time leem; qualquer um comenta; eventos
+-- automáticos só pelo gatilho; ninguém edita; só admin exclui.
+create policy eventos_ler on public.chamado_eventos for select to authenticated
+  using ((select public.eh_membro()));
+create policy eventos_comentar on public.chamado_eventos for insert to authenticated
+  with check ((select public.eh_membro()) and tipo = 'comentario' and char_length(texto) > 0);
+create policy eventos_excluir on public.chamado_eventos for delete to authenticated
   using ((select public.eh_admin()));
 
 -- relatorios: técnico só os próprios; admin todos.
@@ -470,7 +562,7 @@ create policy laudos_excluir on storage.objects for delete to authenticated
 do $$
 declare t text;
 begin
-  foreach t in array array['usuarios', 'chamados', 'relatorios', 'maquinas',
+  foreach t in array array['usuarios', 'chamados', 'chamado_eventos', 'relatorios', 'maquinas',
                            'maquina_historico', 'itens_estoque', 'visitas'] loop
     if not exists (
       select 1 from pg_publication_tables

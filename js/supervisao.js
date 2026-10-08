@@ -4,6 +4,7 @@
 import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
 import { observar, listarUsuarios, paraDate } from "./db.js";
+import { situacaoPrazo } from "./sla.js";
 
 let usuarios = [];
 let relatorios = [];
@@ -90,17 +91,22 @@ function renderizarProdutividade(relatoriosFiltrados, chamadosResolvidosFiltrado
   const alvo = tecnicoFiltro ? usuarios.filter((u) => u.uid === tecnicoFiltro) : usuarios;
 
   if (alvo.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" class="vazio">Nenhum usuário cadastrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="vazio">Nenhum usuário cadastrado.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = alvo.map((u) => {
-    const qtdChamados = chamadosResolvidosFiltrados.filter((c) => c.responsavelUid === u.uid).length;
+    const resolvidosDele = chamadosResolvidosFiltrados.filter((c) => c.responsavelUid === u.uid);
+    const qtdChamados = resolvidosDele.length;
+    const noPrazo = qtdChamados
+      ? Math.round(100 * resolvidosDele.filter((c) => situacaoPrazo(c).estado === "cumprido").length / qtdChamados) + "%"
+      : "—";
     const qtdRelatorios = relatoriosFiltrados.filter((r) => r.tecnicoUid === u.uid).length;
     return `
       <tr>
         <td>${escaparHTML(u.nome)}</td>
         <td>${qtdChamados}</td>
+        <td>${noPrazo}</td>
         <td>${qtdRelatorios}</td>
       </tr>`;
   }).join("");

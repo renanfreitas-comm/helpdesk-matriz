@@ -36,7 +36,17 @@
       <button class="botao-primario" id="btn-novo-chamado">+ Novo chamado</button>
     </div>
 
+    <!-- Atalhos de visão (os mais usados pelos técnicos) -->
+    <div class="abas-rapidas" id="abas-chamados">
+      <button type="button" class="aba-rapida ativa" data-visao="ativos">Em aberto <span class="contador" id="cont-ativos">0</span></button>
+      <button type="button" class="aba-rapida" data-visao="meus">Meus <span class="contador" id="cont-meus">0</span></button>
+      <button type="button" class="aba-rapida" data-visao="livres">Sem responsável <span class="contador" id="cont-livres">0</span></button>
+      <button type="button" class="aba-rapida" data-visao="atrasados">Atrasados <span class="contador contador-alerta" id="cont-atrasados">0</span></button>
+      <button type="button" class="aba-rapida" data-visao="todos">Todos</button>
+    </div>
+
     <div class="filtros">
+      <input type="search" id="filtro-busca" placeholder="Buscar nº, área ou atividade..." />
       <select id="filtro-status">
         <option value="">Todos os status</option>
         <option value="aberto">Aberto</option>
@@ -56,23 +66,25 @@
 
     <div class="tabela-wrapper">
       <div class="tabela-scroll">
-      <table>
+      <table class="tabela-chamados">
         <thead>
           <tr>
             <th>Nº do chamado</th>
             <th>Área atendida</th>
             <th>Prioridade</th>
+            <th>Prazo</th>
             <th>Status</th>
             <th>Responsável</th>
             <th>Ações</th>
           </tr>
         </thead>
         <tbody id="tabela-chamados">
-          <tr><td colspan="6" class="carregando">Carregando chamados...</td></tr>
+          <tr><td colspan="7" class="carregando">Carregando chamados...</td></tr>
         </tbody>
       </table>
       </div>
     </div>
+    <p class="texto-suave" id="rodape-lista" style="font-size:13px;"></p>
   </main>
 
   <!-- Modal: novo chamado / editar chamado -->
@@ -82,28 +94,32 @@
       <form class="modal-form" id="form-chamado">
         <input type="hidden" id="chamado-id" />
 
-        <div class="campo">
-          <label for="chamado-numero">Número do chamado</label>
-          <input type="text" id="chamado-numero" required placeholder="Ex: 2026-0134" />
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="chamado-numero">Número do chamado</label>
+            <input type="text" id="chamado-numero" required placeholder="Ex: 2026-0134" />
+          </div>
+          <div class="campo">
+            <label for="chamado-area">Área atendida</label>
+            <input type="text" id="chamado-area" required placeholder="Ex: Financeiro" list="lista-areas" />
+            <datalist id="lista-areas"></datalist>
+          </div>
         </div>
 
         <div class="campo">
-          <label for="chamado-area">Área atendida</label>
-          <input type="text" id="chamado-area" required placeholder="Ex: Financeiro" />
+          <label for="chamado-atividade">Atividade / problema</label>
+          <textarea id="chamado-atividade" rows="3" required placeholder="Descreva o problema ou o que foi feito no atendimento"></textarea>
         </div>
 
         <div class="campo">
-          <label for="chamado-atividade">Atividade realizada</label>
-          <textarea id="chamado-atividade" rows="3" required placeholder="Descreva o que foi feito no atendimento"></textarea>
-        </div>
-
-        <div class="campo">
-          <label for="chamado-prioridade">Prioridade</label>
-          <select id="chamado-prioridade">
-            <option value="baixa">Baixa</option>
-            <option value="media" selected>Média</option>
-            <option value="alta">Alta</option>
-          </select>
+          <label>Prioridade</label>
+          <div class="seletor-botoes" id="seletor-prioridade">
+            <button type="button" data-valor="baixa">Baixa</button>
+            <button type="button" data-valor="media" class="ativo">Média</button>
+            <button type="button" data-valor="alta">Alta</button>
+          </div>
+          <input type="hidden" id="chamado-prioridade" value="media" />
+          <small class="texto-suave" id="dica-prazo"></small>
         </div>
 
         <div class="linha-dupla" id="linha-admin-chamado">
@@ -129,6 +145,32 @@
           <button type="button" class="botao-secundario" id="btn-cancelar-chamado">Cancelar</button>
           <button type="submit" class="botao-primario" id="btn-salvar-chamado">Salvar</button>
         </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: detalhes do chamado + linha do tempo -->
+  <div class="modal-fundo" id="modal-detalhe">
+    <div class="modal modal-largo">
+      <div class="detalhe-topo">
+        <div>
+          <h2 id="detalhe-titulo">Chamado</h2>
+          <div class="detalhe-badges" id="detalhe-badges"></div>
+        </div>
+        <button type="button" class="botao-secundario" id="btn-fechar-detalhe">Fechar</button>
+      </div>
+
+      <dl class="detalhe-info" id="detalhe-info"></dl>
+      <p class="detalhe-atividade" id="detalhe-atividade"></p>
+
+      <div class="acoes-tabela" id="detalhe-acoes" style="margin:12px 0;"></div>
+
+      <h3 class="detalhe-subtitulo">Linha do tempo</h3>
+      <div class="linha-tempo" id="detalhe-eventos"><p class="texto-suave">Carregando...</p></div>
+
+      <form class="comentar" id="form-comentario">
+        <textarea id="comentario-texto" rows="2" maxlength="2000" placeholder="Anotar o que foi feito, peça trocada, contato com o usuário..."></textarea>
+        <button type="submit" class="botao-primario" id="btn-comentar">Anotar</button>
       </form>
     </div>
   </div>

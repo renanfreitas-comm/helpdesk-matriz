@@ -15,6 +15,23 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 export const SUPABASE_URL = "https://etcxtrtfnasdsgngnwxr.supabase.co";
 export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0Y3h0cnRmbmFzZHNnbmdud3hyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzOTIyMDAsImV4cCI6MjEwNjk2ODIwMH0.UJquMGB-ZE1iiI0mx6WAxcNrZVVxdFDWx_dIR1UNWYg";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-});
+// Se os valores acima não foram preenchidos, mostra um aviso claro na tela
+// em vez de o site simplesmente "não funcionar".
+export const CONFIGURADO = /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 30;
+if (!CONFIGURADO) {
+  const avisar = () => {
+    if (document.getElementById("aviso-config")) return;
+    const aviso = document.createElement("div");
+    aviso.id = "aviso-config";
+    aviso.className = "aviso-config";
+    aviso.textContent = "Site não configurado: preencha SUPABASE_URL e SUPABASE_ANON_KEY em js/supabase-config.js (veja o Passo 5 do README).";
+    document.body.prepend(aviso);
+  };
+  if (document.body) avisar(); else document.addEventListener("DOMContentLoaded", avisar);
+}
+
+export const supabase = createClient(
+  CONFIGURADO ? SUPABASE_URL : "https://nao-configurado.supabase.co",
+  CONFIGURADO ? SUPABASE_ANON_KEY : "nao-configurado",
+  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+);

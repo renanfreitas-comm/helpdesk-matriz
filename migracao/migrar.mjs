@@ -17,7 +17,9 @@
 // senha temporária, salva em "senhas-temporarias.csv" nesta pasta.
 // Repasse cada uma por um canal seguro e APAGUE o arquivo depois.
 // ==========================================================================
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { dirname, join, basename, isAbsolute } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomInt } from "node:crypto";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -30,23 +32,59 @@ import {
 const GRAVAR = process.argv.includes("--gravar");
 
 // ------------------------------------------------------------ configuração
-if (!existsSync("./config.json")) {
-  console.error("Faltou o arquivo config.json. Copie config.exemplo.json para config.json e preencha.");
+// Todos os caminhos são relativos à pasta "migracao" (onde este arquivo
+// está), não importa de onde o comando foi rodado.
+const PASTA = dirname(fileURLToPath(import.meta.url));
+const naPasta = (nome) => join(PASTA, nome);
+
+const arquivoConfig = naPasta("config.json");
+if (!existsSync(arquivoConfig)) {
+  const parecidos = readdirSync(PASTA).filter((f) => /^config.*\.json/i.test(f) && f !== "config.exemplo.json");
+  console.error("Faltou o arquivo config.json na pasta migracao.");
+  if (parecidos.length) console.error(`Achei: ${parecidos.join(", ")} — renomeie para exatamente "config.json".`);
   process.exit(1);
 }
-const config = JSON.parse(readFileSync("./config.json", "utf8"));
-for (const campo of ["arquivoChaveFirebase", "supabaseUrl", "supabaseServiceRoleKey"]) {
+
+let config;
+try {
+  config = JSON.parse(readFileSync(arquivoConfig, "utf8").replace(/^\uFEFF/, ""));
+} catch (e) {
+  console.error("O config.json tem um erro de digitação (aspa ou vírgula faltando):", e.message);
+  process.exit(1);
+}
+for (const campo of ["supabaseUrl", "supabaseServiceRoleKey"]) {
   if (!config[campo] || String(config[campo]).startsWith("COLE_AQUI")) {
     console.error(`Preencha "${campo}" no config.json.`);
     process.exit(1);
   }
 }
-if (!existsSync(config.arquivoChaveFirebase)) {
-  console.error(`Não encontrei a chave do Firebase em "${config.arquivoChaveFirebase}".`);
+config.supabaseUrl = String(config.supabaseUrl).trim().replace(/\/+$/, "");
+
+// Procura a chave do Firebase: caminho informado, mesmo nome dentro da
+// pasta migracao, "chave-firebase.json", ou o arquivo baixado com o nome
+// original do Firebase (...firebase-adminsdk-....json).
+function acharChaveFirebase() {
+  const candidatos = [];
+  const informado = config.arquivoChaveFirebase ? String(config.arquivoChaveFirebase) : "";
+  if (informado) {
+    candidatos.push(isAbsolute(informado) ? informado : join(PASTA, informado));
+    candidatos.push(naPasta(basename(informado)));
+  }
+  candidatos.push(naPasta("chave-firebase.json"), naPasta("chave-firebase.json.json"));
+  readdirSync(PASTA).filter((f) => /firebase-adminsdk.*\.json$/i.test(f)).forEach((f) => candidatos.push(naPasta(f)));
+  return candidatos.find((c) => existsSync(c));
+}
+const arquivoChave = acharChaveFirebase();
+if (!arquivoChave) {
+  console.error("Não encontrei a chave do Firebase na pasta migracao.");
+  console.error('Baixe em: Firebase > Configurações do projeto > Contas de serviço > Gerar nova chave privada,');
+  console.error('e salve o arquivo dentro da pasta migracao com o nome "chave-firebase.json".');
+  console.error("Arquivos .json que estão na pasta agora: " + (readdirSync(PASTA).filter((f) => f.endsWith(".json")).join(", ") || "nenhum"));
   process.exit(1);
 }
+console.log("Chave do Firebase: " + basename(arquivoChave));
 
-initializeApp({ credential: cert(JSON.parse(readFileSync(config.arquivoChaveFirebase, "utf8"))) });
+initializeApp({ credential: cert(JSON.parse(readFileSync(arquivoChave, "utf8"))) });
 const fs = getFirestore();
 const sb = createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -156,7 +194,7 @@ await migrar("visitas", "visitas", converterVisita);
 // ------------------------------------------------------------ 3) senhas
 if (GRAVAR) {
   const csv = senhasCsv.map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\r\n");
-  writeFileSync("./senhas-temporarias.csv", "﻿" + csv, "utf8");
+  writeFileSync(naPasta("senhas-temporarias.csv"), "﻿" + csv, "utf8");
   console.log("\nSenhas temporárias salvas em migracao/senhas-temporarias.csv");
   console.log("Repasse cada uma por um canal seguro e APAGUE esse arquivo depois.");
   console.log("Laudos antigos continuam como links do Google Drive (não foram copiados).");

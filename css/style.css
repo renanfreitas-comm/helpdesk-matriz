@@ -608,7 +608,28 @@ tbody tr:hover {
 }
 
 @media (max-width: 640px) {
-  .app-nav { display: none; }
+  /* Menu no celular: uma faixa que rola para o lado (antes ele sumia). */
+  .app-header { padding: 0 12px; }
+  .app-nav {
+    order: 3;
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 4px 0 8px;
+    margin: 0 -4px;
+  }
+  .app-nav::-webkit-scrollbar { display: none; }
+  .nav-link { padding: 9px 12px; font-size: 14px; }
+  .app-user .nome { display: none; }
+  .app-header .logo .selo-setor { display: none; }
+  .app-header .logo img.logo-principal { height: 22px; }
+  .app-user { gap: 6px; }
+  .app-user .botao-secundario { padding: 7px 10px; font-size: 13px; }
+  .app-header { position: static; }
+  .filtros select { flex: 1 1 140px; min-width: 0; }
+  .app-main { padding: 18px 12px 60px; }
   .linha-dupla { grid-template-columns: 1fr; }
   .barra-linha { grid-template-columns: 90px 1fr 30px; }
   .linha-atividade-cabecalho { display: none; }
@@ -626,4 +647,106 @@ tbody tr:hover {
     grid-auto-rows: auto;
   }
   .linha-atividade-leitura span:empty { display: none; }
+}
+
+
+/* ==========================================================================
+   MELHORIAS PARA O DIA A DIA DOS TÉCNICOS
+   ========================================================================== */
+
+.botao-pequeno, .acoes-tabela .botao-pequeno { padding: 6px 12px; font-size: 13px; }
+a.botao-primario, a.botao-secundario { display: inline-block; padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; }
+.link-suave { font-size: 13px; color: var(--cor-texto-suave); text-decoration: underline; }
+.atalhos { display: flex; gap: 8px; flex-wrap: wrap; }
+.titulo-secao { font-size: 16px; margin: 28px 0 12px; }
+
+/* Prazo (SLA) */
+.badge-prazo-ok        { background: #f3f4f6; color: #374151; }
+.badge-prazo-perto     { background: #fef3c7; color: #92400e; }
+.badge-prazo-atrasado  { background: var(--cor-alta); color: #fff; }
+.badge-prazo-cumprido  { background: #dcfce7; color: var(--cor-resolvido); }
+.badge-prazo-estourado { background: #fee2e2; color: var(--cor-alta); }
+tr.linha-atrasada td:first-child, .fila-item.linha-atrasada { box-shadow: inset 3px 0 0 var(--cor-alta); }
+.card.destaque-atrasado .valor { color: var(--cor-alta); }
+
+/* Atalhos de visão na tela de Chamados */
+.abas-rapidas { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; scrollbar-width: none; }
+.abas-rapidas::-webkit-scrollbar { display: none; }
+.aba-rapida {
+  background: #fff; border: 1px solid var(--cor-borda); color: var(--cor-texto-suave);
+  padding: 8px 14px; border-radius: 999px; font-size: 13.5px; white-space: nowrap;
+}
+.aba-rapida.ativa { background: var(--cor-primaria-tinta); border-color: var(--cor-primaria); color: var(--cor-marca-preta); }
+.contador { display: inline-block; min-width: 20px; padding: 1px 6px; margin-left: 4px; border-radius: 999px; background: #f3f4f6; font-size: 12px; text-align: center; }
+.aba-rapida.ativa .contador { background: #fff; }
+.contador-alerta { background: #fee2e2; color: var(--cor-alta); }
+.filtros input[type="search"] { flex: 1 1 220px; min-width: 180px; }
+
+/* Prioridade como botões (mais rápido no celular) */
+.seletor-botoes { display: flex; gap: 6px; }
+.seletor-botoes button { flex: 1; background: #fff; border: 1px solid var(--cor-borda); color: var(--cor-texto); padding: 9px 8px; }
+.seletor-botoes button.ativo[data-valor="baixa"] { background: #dcfce7; border-color: var(--cor-baixa); color: var(--cor-baixa); }
+.seletor-botoes button.ativo[data-valor="media"] { background: #fef3c7; border-color: var(--cor-media); color: var(--cor-media); }
+.seletor-botoes button.ativo[data-valor="alta"]  { background: #fee2e2; border-color: var(--cor-alta);  color: var(--cor-alta); }
+
+/* Detalhes do chamado + linha do tempo */
+.modal.modal-largo { max-width: 640px; }
+.detalhe-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.detalhe-topo h2 { margin: 0 0 8px; }
+.detalhe-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.detalhe-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 16px; margin: 18px 0 8px; }
+.detalhe-info dt { font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--cor-texto-suave); }
+.detalhe-info dd { margin: 2px 0 0; font-size: 14px; font-weight: 600; }
+.detalhe-atividade { white-space: pre-wrap; background: #f9fafb; border: 1px solid var(--cor-borda); border-radius: 8px; padding: 10px 12px; margin: 8px 0 0; font-size: 14px; }
+.detalhe-subtitulo { font-size: 14px; margin: 16px 0 8px; }
+.linha-tempo { max-height: 260px; overflow-y: auto; border-left: 2px solid var(--cor-borda); margin-left: 6px; padding-left: 14px; }
+.evento { display: flex; gap: 10px; padding: 6px 0; position: relative; }
+.evento-ponto { position: absolute; left: -21px; top: 11px; width: 12px; height: 12px; border-radius: 50%; background: #d1d5db; border: 2px solid #fff; }
+.evento-criacao .evento-ponto { background: var(--cor-primaria); }
+.evento-status .evento-ponto { background: var(--cor-andamento); }
+.evento-atribuicao .evento-ponto { background: #0369a1; }
+.evento-comentario .evento-ponto { background: var(--cor-resolvido); }
+.evento-texto { font-size: 14px; white-space: pre-wrap; }
+.evento-comentario .evento-texto { background: #f0fdf4; border-radius: 8px; padding: 6px 10px; }
+.evento-meta { font-size: 12px; margin-top: 2px; }
+.comentar { display: flex; gap: 8px; margin-top: 12px; align-items: flex-end; }
+.comentar textarea { flex: 1; }
+
+/* Dashboard do técnico */
+.duas-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.duas-colunas .painel { margin-bottom: 0; }
+.painel-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.painel-topo h2 { margin: 0; }
+.fila { list-style: none; margin: 0; padding: 0; }
+.fila-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 8px; border-bottom: 1px solid var(--cor-borda); }
+.fila-item:last-child { border-bottom: none; }
+.fila-info { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: inherit; text-decoration: none; min-width: 0; flex: 1; }
+.fila-info:hover strong { text-decoration: underline; }
+.fila-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+.fila-atividade { width: 100%; font-size: 13px; color: var(--cor-texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila-item .acoes-tabela { flex-shrink: 0; }
+
+/* Aviso de site não configurado */
+.aviso-config { position: fixed; left: 0; right: 0; top: 0; z-index: 1000; background: var(--cor-alta); color: #fff; padding: 12px 16px; font-size: 14px; text-align: center; }
+
+@media (max-width: 860px) {
+  .duas-colunas { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  /* Tabela de chamados vira uma lista de cartões no celular. */
+  .tabela-chamados thead { display: none; }
+  .tabela-chamados, .tabela-chamados tbody, .tabela-chamados tr, .tabela-chamados td { display: block; width: 100%; }
+  .tabela-chamados tr { border-bottom: 1px solid var(--cor-borda); padding: 10px 12px; }
+  .tabela-chamados td { border: none; padding: 3px 0; }
+  .tabela-chamados td[data-rotulo]:not([data-rotulo="Chamado"])::before {
+    content: attr(data-rotulo) ": "; font-size: 12px; color: var(--cor-texto-suave);
+  }
+  .tabela-chamados td .acoes-tabela { margin-top: 6px; }
+  .tabela-chamados .acoes-tabela button { padding: 9px 14px; font-size: 14px; }
+  .fila-item { flex-direction: column; align-items: stretch; }
+  .comentar { flex-direction: column; align-items: stretch; }
+  .modal { padding: 20px 16px; }
+  .detalhe-topo { flex-direction: column-reverse; }
+  .detalhe-topo button { align-self: flex-end; }
 }

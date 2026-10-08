@@ -31,13 +31,35 @@
   </header>
 
   <main class="app-main">
-    <h1>Visão geral</h1>
-
-    <div class="cards-grid">
-      <div class="card">
-        <div class="valor" id="card-total">0</div>
-        <div class="rotulo">Total de chamados</div>
+    <div class="topo-pagina">
+      <h1 id="saudacao">Visão geral</h1>
+      <div class="atalhos">
+        <a class="botao-primario" href="chamados.html#novo">+ Novo chamado</a>
+        <a class="botao-secundario" href="relatorios.html#novo">Relatório do dia</a>
       </div>
+    </div>
+
+    <!-- O que o técnico precisa ver primeiro -->
+    <div class="duas-colunas">
+      <section class="painel">
+        <div class="painel-topo">
+          <h2>Minha fila</h2>
+          <a href="chamados.html" class="link-suave">ver todos</a>
+        </div>
+        <div id="minha-fila"><p class="texto-suave">Carregando...</p></div>
+      </section>
+
+      <section class="painel">
+        <div class="painel-topo">
+          <h2>Esperando alguém assumir</h2>
+          <span class="badge" id="qtd-livres">0</span>
+        </div>
+        <div id="sem-responsavel"><p class="texto-suave">Carregando...</p></div>
+      </section>
+    </div>
+
+    <h2 class="titulo-secao">Indicadores do time</h2>
+    <div class="cards-grid">
       <div class="card destaque-aberto">
         <div class="valor" id="card-aberto">0</div>
         <div class="rotulo">Abertos</div>
@@ -46,19 +68,31 @@
         <div class="valor" id="card-andamento">0</div>
         <div class="rotulo">Em andamento</div>
       </div>
+      <div class="card destaque-atrasado">
+        <div class="valor" id="card-atrasados">0</div>
+        <div class="rotulo">Atrasados</div>
+      </div>
       <div class="card destaque-resolvido">
-        <div class="valor" id="card-resolvido">0</div>
-        <div class="rotulo">Resolvidos</div>
+        <div class="valor" id="card-resolvidos-hoje">0</div>
+        <div class="rotulo">Resolvidos hoje</div>
+      </div>
+      <div class="card">
+        <div class="valor" id="card-tempo-medio">—</div>
+        <div class="rotulo">Tempo médio p/ resolver (30 dias)</div>
+      </div>
+      <div class="card">
+        <div class="valor" id="card-no-prazo">—</div>
+        <div class="rotulo">Resolvidos no prazo (30 dias)</div>
       </div>
     </div>
 
     <div class="painel">
-      <h2>Chamados por prioridade</h2>
+      <h2>Chamados por prioridade (em aberto)</h2>
       <div id="barras-prioridade"></div>
     </div>
 
     <div class="painel">
-      <h2>Chamados por técnico responsável</h2>
+      <h2>Chamados por técnico responsável (em aberto)</h2>
       <div id="barras-tecnico"></div>
     </div>
 

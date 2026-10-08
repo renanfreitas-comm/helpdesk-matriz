@@ -23,12 +23,14 @@ helpdesk-matriz/
 │   ├── supabase-config.js   # URL e chave pública do Supabase (você vai editar)
 │   ├── db.js                # acesso ao banco, compartilhado pelas telas
 │   ├── auth.js              # login, proteção de páginas, funções de admin
+│   ├── sla.js               # prazos por prioridade (edite aqui para mudar)
+│   ├── acoes-chamado.js     # botões rápidos Assumir / Iniciar / Resolver
 │   ├── apps-script-config.js
 │   └── (uma .js por tela)
 ├── supabase/
 │   ├── schema.sql                        # tabelas, regras de acesso, gatilhos, Storage
 │   └── functions/admin-usuarios/index.ts # criar/excluir usuários e trocar senhas (servidor)
-├── apps-script/Codigo.gs                 # envio de e-mails (script.google.com)
+├── apps-script/Codigo.gs                 # e-mails + backup diário (script.google.com)
 └── migracao/                             # cópia única dos dados do Firebase
 ```
 
@@ -41,11 +43,24 @@ helpdesk-matriz/
 - **Usuários** (somente admin): não existe cadastro público — só um admin cria novas contas por aqui (nome, e-mail, senha temporária e papel), além de promover/rebaixar técnicos e admins.
 - **Supervisão** (somente admin): visão consolidada dos relatórios diários de todo o time (com a mesma tabela de atividades), filtrável por técnico e por período, com um resumo de produtividade (chamados resolvidos + relatórios enviados) por pessoa.
 
+### Feito para o dia a dia do técnico
+
+- **Dashboard = minha fila:** ao entrar, o técnico vê os chamados dele (o que vence primeiro fica em cima) e os chamados que estão **esperando alguém assumir**, com botões **Assumir**, **Iniciar** e **Resolver**, sem abrir formulário.
+- **Prazos (SLA) por prioridade:** alta 4 h, média 24 h, baixa 72 h, contados da abertura. Cada chamado mostra "Vence em 3 h" ou "Atrasado 2 h", e os atrasados ficam marcados em vermelho. Para mudar os prazos, edite `js/sla.js`.
+- **Chamados com atalhos:** abas "Em aberto / Meus / Sem responsável / Atrasados / Todos" (o técnico já entra em "Meus"), busca por número, área ou texto, e sugestão automática de áreas já usadas.
+- **Abrir chamado rápido:** o chamado novo já vem "para mim, em andamento", com prioridade escolhida em um toque.
+- **Linha do tempo do chamado:** em **Detalhes**, fica registrado sozinho quem abriu, quem assumiu e cada mudança de status. O técnico pode **anotar** o que fez (peça trocada, contato com o usuário...). Ao clicar em **Resolver**, o site pergunta "o que foi feito?" e guarda a resposta ali.
+- **Relatório do dia em 1 clique:** no relatório, o botão **Preencher com o que fiz no dia** puxa os chamados, as manutenções de máquinas e as visitas do técnico naquela data. É só conferir e salvar.
+- **Funciona no celular:** o menu vira uma faixa que rola para o lado e a lista de chamados vira cartões com botões grandes.
+- **Links diretos:** `chamados.html#novo` abre um chamado novo, `chamados.html#c=<id>` abre um chamado específico, e `relatorios.html#novo` abre o relatório de hoje (ou edita o de hoje, se já existir).
+- **Para o supervisor:** o Dashboard mostra atrasados, resolvidos hoje, tempo médio de resolução e % no prazo (últimos 30 dias), e a Supervisão mostra o % no prazo por técnico.
+
 ### O que o banco garante sozinho
 
 - Só quem está logado **e tem perfil em `usuarios`** vê ou grava qualquer coisa. Excluir alguém em Usuários corta o acesso na hora.
 - Ninguém se promove a admin. E sempre sobra pelo menos um admin: o banco recusa rebaixar ou excluir o último.
-- O técnico só muda o **status** dos chamados em que é responsável. Chamados abertos por técnicos começam sempre como "Aberto" e sem responsável.
+- O técnico abre chamados sem responsável ou para si mesmo (nunca para outra pessoa). Ele só muda o **status** dos chamados que são dele, e pode **assumir** um chamado sem responsável. Para mudar o status de um chamado livre, precisa assumi-lo primeiro.
+- A linha do tempo dos chamados não pode ser editada nem apagada por técnicos, e os eventos automáticos não podem ser falsificados.
 - Cada técnico só vê e edita os **próprios** relatórios. Admins veem todos.
 - Visitas só podem ser editadas por quem registrou ou por um admin, e o mesmo vale para enviar ou trocar o laudo.
 - "Quem criou", "quando criou/atualizou" e "quando o chamado foi resolvido" são preenchidos pelo banco e não podem ser falsificados.
@@ -157,6 +172,39 @@ Se o GitHub Pages ainda não estiver ativo: no repositório, **Settings → Page
 4. Crie uma visita de teste, marque como Realizada com um PDF e confira se o laudo abre.
 
 Depois que tudo estiver funcionando por alguns dias, o projeto no Firebase pode ser desativado.
+
+---
+
+## Atualizações
+
+### Outubro/2026 — melhorias para os técnicos (fazer uma vez)
+
+1. **Banco:** no Supabase, abra o **SQL Editor**, cole **todo** o `supabase/schema.sql` atualizado e clique em **Run**. Isso cria a linha do tempo dos chamados e as regras de "assumir" e não apaga nenhum dado.
+2. **Site:** copie os arquivos novos para a pasta do repositório e publique:
+   ```bash
+   git add .
+   git commit -m "Melhorias para os técnicos"
+   git push
+   ```
+3. **Apps Script:** substitua o código pelo novo `apps-script/Codigo.gs`, que já vem com a URL e a chave pública do Supabase preenchidas, e publique uma **nova versão** (Implantar → Gerenciar implantações → Editar → Nova versão). Em seguida, ligue o backup diário (veja abaixo).
+4. **Firebase:** depois de alguns dias com tudo funcionando, revogue a chave usada na migração e desative o projeto antigo (veja abaixo).
+
+### Backup diário (recomendado)
+
+O plano gratuito do Supabase não oferece backup para baixar, e pausa o projeto depois de 7 dias sem acesso. O Apps Script resolve as duas coisas:
+
+1. No editor do Apps Script, vá em ⚙️ **Configurações do projeto → Propriedades do script → Adicionar propriedade**. Em *Propriedade*, coloque `SUPABASE_SERVICE_KEY`. Em *Valor*, cole a chave **service_role / secret** do Supabase. Ela fica guardada só na sua conta Google: não vai para o site nem para o GitHub.
+2. Escolha a função **`instalarBackupDiario`** e clique em **Executar**. Aceite a permissão do Google Drive.
+
+A partir daí, todo dia por volta das 3h fica salvo um arquivo `backup-helpdesk-AAAA-MM-DD.json` na pasta **Help Desk Matriz - Backups** do seu Drive, com os últimos 30 dias guardados.
+
+### Revogar a chave do Firebase usada na migração
+
+Apagar o arquivo `chave-firebase.json` do computador **não** desativa a chave: ela continua válida até ser excluída. No [Google Cloud Console](https://console.cloud.google.com/iam-admin/serviceaccounts?project=helpdesk-matriz-58813):
+1. Clique na conta `firebase-adminsdk-...` e abra a aba **Chaves**.
+2. Exclua a chave criada no dia da migração.
+
+Quando não precisar mais do Firebase, você pode excluir o projeto inteiro em **Configurações do projeto → Geral → Excluir projeto**.
 
 ---
 

@@ -4,10 +4,11 @@
 import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
 import { exportarCSV, nomeArquivoComData } from "./csv-utils.js";
-import { observar, inserir, atualizar, excluir, listarUsuarios } from "./db.js";
+import { observar, inserir, atualizar, excluir, listarUsuarios, buscarTodos } from "./db.js";
 
 let usuarioAtual = null;
 let perfilAtual = null;
+let abrirHojeQuandoCarregar = false;
 let listaRelatorios = [];   // cache local: só os próprios (técnico) ou de todo o time (admin)
 let listaUsuarios = [];     // usado só pelo filtro de técnico, visível apenas para admin
 
@@ -42,6 +43,12 @@ protegerPagina(async (user, perfil) => {
   }
 
   observarRelatorios();
+
+  // Atalho vindo do Dashboard: relatorios.html#novo
+  if (window.location.hash === "#novo") {
+    history.replaceState(null, "", window.location.pathname);
+    abrirHojeQuandoCarregar = true; // espera a lista chegar para saber se já existe
+  }
 });
 
 // -------------------- Linhas de atividade (dinâmicas) --------------------
@@ -72,6 +79,90 @@ function criarLinhaAtividade(dados = {}) {
 
 document.getElementById("btn-add-atividade").addEventListener("click", () => criarLinhaAtividade());
 
+// -------------------- Preencher sozinho com o que o técnico fez no dia --------------------
+// Junta, da data escolhida no relatório:
+//  - chamados em que você é o responsável e que foram atualizados ou resolvidos;
+//  - registros que você fez no histórico de manutenção das máquinas;
+//  - visitas técnicas que você registrou para esse dia.
+// Linhas que já estão no relatório não são repetidas.
+document.getElementById("btn-preencher-dia").addEventListener("click", preencherComMeuDia);
+
+async function preencherComMeuDia() {
+  const botao = document.getElementById("btn-preencher-dia");
+  const dica = document.getElementById("dica-preencher");
+  const data = document.getElementById("relatorio-data").value || hojeISO();
+  const inicio = new Date(data + "T00:00:00");
+  const fim = new Date(inicio.getTime() + 24 * 3600 * 1000);
+  const noDia = (v) => v && new Date(v) >= inicio && new Date(v) < fim;
+
+  botao.disabled = true;
+  botao.textContent = "Buscando...";
+  dica.textContent = "";
+  try {
+    const uid = usuarioAtual.uid;
+    const [chamados, historico, visitas] = await Promise.all([
+      buscarTodos("chamados", (q) => q.eq("responsavel_uid", uid).gte("atualizado_em", inicio.toISOString())),
+      buscarTodos("maquina_historico", (q) => q.eq("tecnico_uid", uid).gte("criado_em", inicio.toISOString()).lt("criado_em", fim.toISOString())),
+      buscarTodos("visitas", (q) => q.eq("criado_por_uid", uid).eq("data", data))
+    ]);
+
+    const novas = [];
+    const STATUS_CHAMADO = { resolvido: "concluido", andamento: "andamento", aberto: "pendente" };
+    chamados
+      .filter((c) => noDia(c.atualizadoEm) || noDia(c.resolvidoEm))
+      .forEach((c) => novas.push({
+        categoria: "Chamado",
+        atividade: `${c.numero ? c.numero + " — " : ""}${c.atividade || ""}`.slice(0, 300),
+        quantidadeArea: c.area || "",
+        status: c.status === "resolvido" && !noDia(c.resolvidoEm) ? "concluido" : STATUS_CHAMADO[c.status] || "andamento"
+      }));
+
+    if (historico.length) {
+      const ids = [...new Set(historico.map((h) => h.maquinaId))];
+      const maquinas = await buscarTodos("maquinas", (q) => q.in("id", ids), "id,nome");
+      const nomeMaquina = Object.fromEntries(maquinas.map((m) => [m.id, m.nome]));
+      historico.forEach((h) => novas.push({
+        categoria: "Manutenção",
+        atividade: `${nomeMaquina[h.maquinaId] || "Máquina"}: ${h.descricao}`.slice(0, 300),
+        quantidadeArea: "",
+        status: "concluido"
+      }));
+    }
+
+    const STATUS_VISITA = { realizada: "concluido", agendada: "pendente" };
+    visitas
+      .filter((v) => v.status !== "cancelada")
+      .forEach((v) => novas.push({
+        categoria: "Visita técnica",
+        atividade: v.titulo || "",
+        quantidadeArea: [v.cidade, v.area].filter(Boolean).join(" / "),
+        status: STATUS_VISITA[v.status] || "pendente"
+      }));
+
+    // Não repete o que já está na tabela; reaproveita linha vazia.
+    const existentes = new Set(coletarAtividades().map((a) => (a.categoria + "|" + a.atividade).toLowerCase()));
+    const paraAdicionar = novas.filter((a) => !existentes.has((a.categoria + "|" + a.atividade).toLowerCase()));
+    if (paraAdicionar.length && coletarAtividades().length === 0) linhasAtividadesEl.innerHTML = "";
+    paraAdicionar.forEach((a) => criarLinhaAtividade(a));
+
+    dica.textContent = paraAdicionar.length
+      ? `${paraAdicionar.length} atividade(s) adicionada(s). Confira e ajuste antes de salvar.`
+      : (novas.length ? "Tudo do dia já está no relatório." : "Não encontrei chamados, manutenções ou visitas seus nesta data.");
+  } catch (err) {
+    dica.textContent = "Não foi possível buscar: " + err.message;
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Preencher com o que fiz no dia";
+  }
+}
+
+// Abre o relatório de hoje: edita se já existir, senão cria um novo.
+function abrirRelatorioDeHoje() {
+  const existente = listaRelatorios.find((r) => r.tecnicoUid === usuarioAtual.uid && r.data === hojeISO());
+  if (existente) abrirModal("editar", existente.id);
+  else abrirModal("criar");
+}
+
 function coletarAtividades() {
   return Array.from(linhasAtividadesEl.querySelectorAll(".linha-atividade")).map((linha) => ({
     categoria: linha.querySelector(".at-categoria").value.trim(),
@@ -91,6 +182,7 @@ function observarRelatorios() {
     return base.order("data", { ascending: false }).order("criado_em", { ascending: false });
   }, (linhas) => {
     listaRelatorios = linhas;
+    if (abrirHojeQuandoCarregar) { abrirHojeQuandoCarregar = false; abrirRelatorioDeHoje(); }
     renderizarLista();
   }, (erro) => {
     listaEl.innerHTML = `<p class="vazio">Erro ao carregar relatórios: ${escaparHTML(erro.message)}</p>`;
@@ -209,6 +301,7 @@ function abrirModal(modo, relatorioId = null) {
   form.reset();
   document.getElementById("relatorio-id").value = relatorioId || "";
   linhasAtividadesEl.innerHTML = "";
+  document.getElementById("dica-preencher").textContent = "";
 
   if (modo === "criar") {
     document.getElementById("modal-relatorio-titulo").textContent = "Novo relatório do dia";
