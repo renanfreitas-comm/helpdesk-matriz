@@ -30,6 +30,7 @@ export const ICONES = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   agenda: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><rect x="7" y="13" width="3" height="3" rx=".5"/>',
   solucoes: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 8h6M9 11h4"/>',
+  links: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
   sino: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   tv: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M7 12l3-3 2 2 4-4"/>'
 };
@@ -48,6 +49,7 @@ const ITENS = [
   { href: "solucoes.html", rotulo: "Soluções", icone: "solucoes" },
   { href: "maquinas.html", rotulo: "Máquinas", icone: "maquinas" },
   { href: "estoque.html", rotulo: "Estoque", icone: "estoque" },
+  { href: "links.html", rotulo: "Links úteis", icone: "links" },
   { secao: "Gestão", admin: true },
   { href: "supervisao.html", rotulo: "Indicadores", icone: "supervisao", admin: true },
   { href: "usuarios.html", rotulo: "Usuários", icone: "usuarios", admin: true },

@@ -1317,6 +1317,104 @@ $$;
 revoke execute on function public.consultar_chamado_portal(text) from public;
 grant execute on function public.consultar_chamado_portal(text) to anon, authenticated;
 
+-- ==================================================================
+-- MÁQUINA CHEGOU PARA MANUTENÇÃO → CHAMADO AUTOMÁTICO PARA A EQUIPE
+-- ==================================================================
+-- Quando uma máquina entra em manutenção (Delegação ou Situação =
+-- "Manutenção"), abre um chamado sem responsável. Os técnicos são
+-- avisados no sino. Se a máquina já tem um chamado de manutenção em
+-- aberto, não abre outro.
+alter table public.maquinas add column if not exists chamado_manutencao_id text
+  references public.chamados (id) on delete set null;
+create sequence if not exists public.manutencao_numero_seq;
+
+create or replace function public.tg_maquina_manutencao()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  entrou boolean;
+  aberto boolean;
+  novo_id text;
+  numero text;
+  detalhes text;
+begin
+  if auth.uid() is null then return new; end if;   -- migração/SQL Editor: não abre chamado
+  entrou := (new.status = 'manutencao' or new.armazenamento = 'manutencao')
+            and (tg_op = 'INSERT' or not (old.status = 'manutencao' or old.armazenamento = 'manutencao'));
+  if not entrou then return new; end if;
+
+  select exists (select 1 from chamados c where c.id = new.chamado_manutencao_id and c.status <> 'resolvido')
+    into aberto;
+  if aberto then return new; end if;
+
+  numero := 'M' || to_char(now() at time zone 'America/Sao_Paulo', 'YYMM') || '-' || lpad(nextval('manutencao_numero_seq')::text, 4, '0');
+  detalhes := concat_ws(' · ',
+    nullif('S/N ' || nullif(btrim(new.setor), ''), 'S/N '),
+    nullif('Ativo ' || nullif(btrim(new.responsavel_uso), ''), 'Ativo '),
+    nullif('Chegada ' || nullif(btrim(new.processador), ''), 'Chegada '),
+    nullif('Chamado externo ' || nullif(btrim(new.ip), ''), 'Chamado externo '));
+  insert into chamados (numero, area, atividade, prioridade, status, responsavel_uid)
+  values (numero,
+          coalesce(nullif(btrim(new.so), ''), 'TI'),
+          left('Manutenção da máquina ' || new.nome || coalesce(' (' || nullif(detalhes, '') || ')', '')
+               || coalesce(E'\n' || nullif(btrim(new.observacoes), ''), ''), 5000),
+          'media', 'aberto', null)
+  returning id into novo_id;
+
+  new.chamado_manutencao_id := novo_id;
+  -- Campo "Chamado" da máquina: preenche com o número, se estiver vazio.
+  if btrim(coalesce(new.ip, '')) = '' then new.ip := numero; end if;
+  return new;
+end $$;
+drop trigger if exists maquinas_manutencao on public.maquinas;
+create trigger maquinas_manutencao before insert or update on public.maquinas
+  for each row execute function public.tg_maquina_manutencao();
+
+-- ==================================================================
+-- LINKS ÚTEIS (menu com os sistemas usados pelo time)
+-- ==================================================================
+create table if not exists public.links_uteis (
+  id         text primary key default gen_random_uuid()::text,
+  titulo     text not null check (char_length(titulo) between 1 and 120),
+  url        text not null check (url ~ '^https?://' and char_length(url) <= 2000),
+  descricao  text not null default '' check (char_length(descricao) <= 200),
+  categoria  text not null default 'Outros' check (char_length(categoria) between 1 and 60),
+  ordem      integer not null default 0,
+  criado_em  timestamptz not null default now()
+);
+alter table public.links_uteis enable row level security;
+drop policy if exists links_ler on public.links_uteis;
+drop policy if exists links_criar on public.links_uteis;
+drop policy if exists links_editar on public.links_uteis;
+drop policy if exists links_excluir on public.links_uteis;
+create policy links_ler on public.links_uteis for select to authenticated
+  using ((select public.eh_membro()));
+create policy links_criar on public.links_uteis for insert to authenticated
+  with check ((select public.eh_admin()));
+create policy links_editar on public.links_uteis for update to authenticated
+  using ((select public.eh_admin())) with check ((select public.eh_admin()));
+create policy links_excluir on public.links_uteis for delete to authenticated
+  using ((select public.eh_admin()));
+
+-- Links iniciais: só entram se a tabela estiver vazia (rodar o script de
+-- novo não duplica nem desfaz o que o admin editou).
+insert into public.links_uteis (titulo, url, descricao, categoria, ordem)
+select * from (values
+  ('VExpenses', 'https://auth.vexpenses.com/login', 'Plataforma de reembolso', 'Administrativo', 1),
+  ('Ponto LG', 'https://login.lg.com.br/login/commcenter', 'Plataforma de ponto', 'Administrativo', 2),
+  ('VendApp', 'https://vendapp.com.br/vendapp/login', 'VendApp', 'Administrativo', 3),
+  ('Fiserv (SiTef Express)', 'https://oauth.softwareexpress.com.br/auth/realms/sitefexpress/protocol/openid-connect/auth?response_type=code&client_id=sitefweb&redirect_uri=https%3A%2F%2Fsitefexpress2.softwareexpress.com.br%2Fsitefweb%2Fsso%2Flogin&state=f474e034-ab05-44d8-8ae8-a5c03f5862ae&login=true&scope=openid', 'Plataforma Fiserv', 'Administrativo', 4),
+  ('Protheus Veneto', 'http://10.130.2.200:8101/', 'Só na rede da empresa / VPN', 'Protheus', 1),
+  ('Protheus MDX', 'http://10.130.3.103:8098/', 'Só na rede da empresa / VPN', 'Protheus', 2),
+  ('Protheus VMT', 'http://10.130.2.123:8101/', 'Só na rede da empresa / VPN', 'Protheus', 3),
+  ('N-able', 'https://vivasecurity.n-able.com/IndexAction.action', 'Monitoramento e acesso remoto', 'Infraestrutura e segurança', 1),
+  ('Controladora Ubiquiti', 'https://ubt.commcenter.com.br:8443/manage/account/login?redirect=%2Fmanage', 'Rede Wi-Fi (UniFi)', 'Infraestrutura e segurança', 2),
+  ('Sophos Central', 'https://login.sophos.com/login.sophos.com/oauth2/v2.0/authorize?p=B2C_1A_signup_signin&client_id=d8ce821f-a1da-4b03-b7e2-1d1a9cc028f3&redirect_uri=https%3A%2F%2Fcloud.sophos.com%2Fmanage%2Fcentral-login&scope=openid&response_type=id_token&prompt=login&state=', 'Antivírus e firewall', 'Infraestrutura e segurança', 3),
+  ('Intemobile', 'https://plataforma.intemobile.com/account/login', 'Plataforma de ativos', 'Infraestrutura e segurança', 4),
+  ('Qualitor — Atendente', 'https://portal.vantix.com.br/login.php?cdlingua=&lasturl=47W104W116g109t108W47x105g110s100W101x120B46s112s104s112B63s95s112t111s114x116B97t108B95s61B84FNsctdxlgYsiWYWexe&f=N', 'Atender chamados no Qualitor', 'Qualitor', 1),
+  ('Qualitor — Solicitante', 'https://qualitor.vantix.com.br/loginUsuario.php?cdlingua', 'Abrir chamado no Qualitor', 'Qualitor', 2)
+) as v(titulo, url, descricao, categoria, ordem)
+where not exists (select 1 from public.links_uteis);
+
 -- ====================================================== REALTIME (telas ao vivo)
 do $$
 declare t text;
@@ -1324,7 +1422,7 @@ begin
   foreach t in array array['usuarios', 'sessoes_ativas', 'chamados', 'chamado_eventos', 'tarefas', 'tarefa_conclusoes',
                            'relatorios', 'maquinas',
                            'maquina_historico', 'itens_estoque', 'visitas',
-                           'solucoes', 'agenda_eventos', 'notificacoes'] loop
+                           'solucoes', 'agenda_eventos', 'notificacoes', 'links_uteis'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

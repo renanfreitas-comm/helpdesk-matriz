@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Links úteis — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="com-menu">
+
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <div>
+        <h1>Links úteis</h1>
+        <p class="texto-suave subtitulo-pagina">Os sistemas que o time usa no dia a dia. Abrem em uma aba nova.</p>
+      </div>
+      <button class="botao-primario apenas-admin" id="btn-novo-link" style="display:none">+ Novo link</button>
+    </div>
+
+    <div class="filtros filtros-solucoes">
+      <input type="search" id="busca-links" placeholder="Buscar: Protheus, ponto, reembolso, Sophos..." autocomplete="off" />
+    </div>
+
+    <div id="grupos-links"><p class="vazio">Carregando...</p></div>
+  </main>
+
+  <!-- Modal: novo / editar link (admin) -->
+  <div class="modal-fundo" id="modal-link">
+    <div class="modal">
+      <h2 id="link-modal-titulo">Novo link</h2>
+      <form class="modal-form" id="form-link">
+        <input type="hidden" id="link-id" />
+        <div class="campo">
+          <label for="link-titulo">Nome</label>
+          <input type="text" id="link-titulo" required maxlength="120" placeholder="Ex.: Protheus Veneto" />
+        </div>
+        <div class="campo">
+          <label for="link-url">Endereço</label>
+          <input type="url" id="link-url" required maxlength="2000" placeholder="https://..." />
+        </div>
+        <div class="campo">
+          <label for="link-descricao">Para que serve <span class="texto-suave">(opcional)</span></label>
+          <input type="text" id="link-descricao" maxlength="200" placeholder="Ex.: Plataforma de reembolso" />
+        </div>
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="link-categoria">Grupo</label>
+            <input type="text" id="link-categoria" required maxlength="60" list="lista-categorias-link" placeholder="Ex.: Administrativo" />
+            <datalist id="lista-categorias-link"></datalist>
+          </div>
+          <div class="campo">
+            <label for="link-ordem">Ordem no grupo</label>
+            <input type="number" id="link-ordem" value="0" />
+          </div>
+        </div>
+        <p class="erro-msg" id="link-erro"></p>
+        <div class="modal-acoes">
+          <button type="button" class="botao-perigo" id="btn-excluir-link" style="margin-right:auto" hidden>Excluir</button>
+          <button type="button" class="botao-secundario" id="btn-cancelar-link">Cancelar</button>
+          <button type="submit" class="botao-primario" id="btn-salvar-link">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/links.js"></script>
+</body>
+</html>

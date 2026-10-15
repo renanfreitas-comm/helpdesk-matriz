@@ -304,6 +304,13 @@ Faça **nesta ordem**:
 2. **Banco:** rode o `supabase/schema.sql` inteiro no **SQL Editor**.
 3. Em **Usuários → Portal do colaborador**: copie o link, baixe o QR code ou imprima o cartaz. Se o link vazar para fora da empresa, clique em **Gerar link novo** (o antigo para de funcionar na hora).
 
+### Outubro/2026 — Chamado automático de manutenção e Links úteis
+
+- **Máquina chegou para manutenção:** ao cadastrar ou alterar uma máquina com **Delegação = Manutenção** ou **Situação = Em manutenção**, o sistema abre sozinho um chamado **sem responsável** (número M<AAMM>-0001) e avisa os técnicos no sino. O campo "Chamado" da máquina recebe esse número (se estiver vazio; se já tiver um número externo, ele é mantido e citado no chamado). Enquanto esse chamado estiver aberto, não abre outro para a mesma máquina. Máquinas que já estavam em manutenção antes desta atualização não ganham chamado.
+- **Links úteis (menu):** os sistemas do time agrupados (Administrativo, Protheus, Infraestrutura e segurança, Qualitor), com busca. Os do Protheus têm o aviso "Rede interna / VPN". O admin adiciona, edita e exclui links pela própria tela.
+
+Faça **nesta ordem**: `git add .`, `git commit -m "Chamado automático de manutenção e links úteis"`, `git push`; depois rode o `supabase/schema.sql` inteiro no SQL Editor.
+
 ### Relatório de pendências das 18h
 
 Ele usa a mesma propriedade `SUPABASE_SERVICE_KEY` do backup diário. Se o backup ainda não foi ligado, siga o passo 1 de "Backup diário" antes.

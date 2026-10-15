@@ -1431,3 +1431,19 @@ body.portal { background: linear-gradient(180deg, #000 0, #000 220px, var(--cor-
 @media (max-width: 760px) { .portal-admin { grid-template-columns: 1fr; } }
 .selo-portal { display: inline-block; margin-top: 4px; font-size: 11.5px; font-weight: 600; color: #1e40af; background: #dbeafe; border-radius: 999px; padding: 1px 8px; }
 .card-quadro .selo-portal { margin: 0; }
+.aviso-chamado-maquina { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 9px 12px; font-size: 13.5px; margin: -4px 0 12px; }
+.aviso-chamado-maquina a { color: inherit; }
+
+/* Links úteis */
+.grade-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.cartao-link { background: #fff; border: 1px solid var(--cor-borda); border-radius: var(--raio); display: flex; flex-direction: column; transition: border-color .15s, box-shadow .15s; }
+.cartao-link:hover { border-color: var(--cor-primaria); box-shadow: 0 4px 14px rgba(0,0,0,.06); }
+.cartao-link-principal { display: flex; align-items: flex-start; gap: 12px; padding: 14px 14px 8px; color: var(--cor-texto); text-decoration: none; flex: 1; }
+.cartao-link-icone { width: 40px; height: 40px; border-radius: 10px; background: var(--cor-primaria-tinta); color: #7c5800; display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: none; }
+.cartao-link-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.cartao-link-texto strong { font-size: 14.5px; }
+.cartao-link-texto small { color: var(--cor-texto-suave); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cartao-link-seta { color: var(--cor-texto-suave); font-size: 16px; }
+.selo-interno { align-self: flex-start; margin-top: 4px; font-size: 11px; font-weight: 600; color: #92400e; background: #fef3c7; border-radius: 999px; padding: 1px 8px; }
+.cartao-link-acoes { display: flex; gap: 14px; padding: 0 14px 10px 66px; }
+.cartao-link-acoes .link-suave { background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; cursor: pointer; }

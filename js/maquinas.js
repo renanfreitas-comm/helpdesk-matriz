@@ -4,7 +4,7 @@
 import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
 import { exportarCSV, nomeArquivoComData } from "./csv-utils.js";
-import { observar, inserir, atualizar, excluir, listarUsuarios, paraDate } from "./db.js";
+import { observar, inserir, atualizar, excluir, listarUsuarios, paraDate, buscarTodos } from "./db.js";
 
 let perfilAtual = null;
 let usuarioAtual = null;
@@ -130,6 +130,7 @@ function abrirModal(modo, maquinaId = null) {
   form.reset();
   document.getElementById("maquina-id").value = maquinaId || "";
 
+  document.getElementById("maquina-chamado-auto").hidden = true;
   if (modo === "criar") {
     document.getElementById("modal-maquina-titulo").textContent = "Nova máquina";
     blocoHistorico.style.display = "none";
@@ -151,9 +152,26 @@ function abrirModal(modo, maquinaId = null) {
     blocoHistorico.style.display = "block";
     blocoEnviarEstoque.style.display = "block";
     observarHistorico(maquinaId);
+    mostrarChamadoAutomatico(m);
   }
 
   modal.classList.add("aberto");
+}
+
+// Chamado aberto sozinho quando a máquina entrou em manutenção.
+async function mostrarChamadoAutomatico(m) {
+  const el = document.getElementById("maquina-chamado-auto");
+  el.hidden = true;
+  if (!m || !m.chamadoManutencaoId) return;
+  try {
+    const [c] = await buscarTodos("chamados", (q) => q.eq("id", m.chamadoManutencaoId), "id,numero,status,responsavel_nome");
+    if (!c || maquinaIdAtual !== m.id) return;
+    const rotulo = { aberto: "Aberto", andamento: "Em andamento", resolvido: "Resolvido" }[c.status] || c.status;
+    el.innerHTML = `🛠 Chamado de manutenção <a href="chamados.html#c=${encodeURIComponent(c.id)}"><strong>${escaparHTML(c.numero)}</strong></a>
+      · <span class="badge badge-status-${c.status}">${rotulo}</span>
+      · ${c.responsavelNome ? "com " + escaparHTML(c.responsavelNome) : "aguardando um técnico assumir"}`;
+    el.hidden = false;
+  } catch (e) { /* sem acesso ao chamado: só não mostra */ }
 }
 
 function fecharModal() {
@@ -193,8 +211,16 @@ form.addEventListener("submit", async (evento) => {
       if (!listaMaquinas.some((x) => x.id === nova.id)) listaMaquinas.push(nova);
       abrirModal("editar", nova.id);
     } else {
-      await atualizar("maquinas", maquinaIdAtual, dados);
-      fecharModal();
+      const antes = listaMaquinas.find((x) => x.id === maquinaIdAtual);
+      const salva = await atualizar("maquinas", maquinaIdAtual, dados);
+      if (salva.chamadoManutencaoId && salva.chamadoManutencaoId !== (antes && antes.chamadoManutencaoId)) {
+        // Entrou em manutenção agora: mostra o chamado aberto em vez de fechar.
+        const i = listaMaquinas.findIndex((x) => x.id === salva.id);
+        if (i >= 0) listaMaquinas[i] = salva;
+        abrirModal("editar", salva.id);
+      } else {
+        fecharModal();
+      }
     }
   } catch (err) {
     erroEl.textContent = "Erro ao salvar: " + err.message;
