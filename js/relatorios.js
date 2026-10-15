@@ -83,7 +83,8 @@ document.getElementById("btn-add-atividade").addEventListener("click", () => cri
 // Junta, da data escolhida no relatório:
 //  - chamados em que você é o responsável e que foram atualizados ou resolvidos;
 //  - registros que você fez no histórico de manutenção das máquinas;
-//  - visitas técnicas que você registrou para esse dia.
+//  - visitas técnicas que você registrou para esse dia;
+//  - tarefas do dia (módulo Tarefas) que são suas e foram marcadas como feitas.
 // Linhas que já estão no relatório não são repetidas.
 document.getElementById("btn-preencher-dia").addEventListener("click", preencherComMeuDia);
 
@@ -100,10 +101,12 @@ async function preencherComMeuDia() {
   dica.textContent = "";
   try {
     const uid = usuarioAtual.uid;
-    const [chamados, historico, visitas] = await Promise.all([
+    const [chamados, historico, visitas, minhasTarefas, conclusoesDoDia] = await Promise.all([
       buscarTodos("chamados", (q) => q.eq("responsavel_uid", uid).gte("atualizado_em", inicio.toISOString())),
       buscarTodos("maquina_historico", (q) => q.eq("tecnico_uid", uid).gte("criado_em", inicio.toISOString()).lt("criado_em", fim.toISOString())),
-      buscarTodos("visitas", (q) => q.eq("criado_por_uid", uid).eq("data", data))
+      buscarTodos("visitas", (q) => q.eq("criado_por_uid", uid).eq("data", data)),
+      buscarTodos("tarefas", (q) => q.eq("responsavel_uid", uid), "id,titulo,descricao,ordem").catch(() => []),
+      buscarTodos("tarefa_conclusoes", (q) => q.eq("data", data), "tarefa_id,concluida_em").catch(() => [])
     ]);
 
     const novas = [];
@@ -129,6 +132,21 @@ async function preencherComMeuDia() {
       }));
     }
 
+    // Tarefas do dia que você concluiu (na ordem em que aparecem na tela Tarefas).
+    const feitas = new Map(conclusoesDoDia.map((c) => [String(c.tarefaId), c]));
+    minhasTarefas
+      .filter((t) => feitas.has(String(t.id)))
+      .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || String(a.titulo).localeCompare(String(b.titulo)))
+      .forEach((t) => {
+        const hora = horaDe(feitas.get(String(t.id)).concluidaEm);
+        novas.push({
+          categoria: "Tarefa",
+          atividade: `${t.titulo}${t.descricao ? " — " + t.descricao : ""}`.slice(0, 300),
+          quantidadeArea: hora ? `Feita às ${hora}` : "",
+          status: "concluido"
+        });
+      });
+
     const STATUS_VISITA = { realizada: "concluido", agendada: "pendente" };
     visitas
       .filter((v) => v.status !== "cancelada")
@@ -147,7 +165,7 @@ async function preencherComMeuDia() {
 
     dica.textContent = paraAdicionar.length
       ? `${paraAdicionar.length} atividade(s) adicionada(s). Confira e ajuste antes de salvar.`
-      : (novas.length ? "Tudo do dia já está no relatório." : "Não encontrei chamados, manutenções ou visitas seus nesta data.");
+      : (novas.length ? "Tudo do dia já está no relatório." : "Não encontrei tarefas, chamados, manutenções ou visitas seus nesta data.");
   } catch (err) {
     dica.textContent = "Não foi possível buscar: " + err.message;
   } finally {
@@ -392,4 +410,10 @@ function escaparHTML(texto) {
 
 function escaparAtributo(texto) {
   return (texto ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+function horaDe(valor) {
+  if (!valor) return "";
+  const d = new Date(valor);
+  return isNaN(d) ? "" : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
