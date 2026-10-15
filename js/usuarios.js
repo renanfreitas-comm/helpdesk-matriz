@@ -3,6 +3,7 @@
 // ==========================================================================
 import { protegerPagina, criarUsuarioComoAdmin, excluirUsuarioComoAdmin, definirSenhaComoAdmin } from "./auth.js";
 import { montarNav } from "./nav.js";
+import { iniciarPortalAdmin } from "./portal-admin.js";
 import { atualizar, observar, supabase } from "./db.js";
 
 let usuarioLogadoUid = null;
@@ -16,6 +17,7 @@ const form = document.getElementById("form-usuario");
 protegerPagina((user, perfil) => {
   usuarioLogadoUid = user.uid;
   montarNav(perfil, user);
+  iniciarPortalAdmin();
 
   // Quem está conectado e em qual máquina (atualiza sozinho).
   observar("sessoes_ativas", (q) => q, (linhas) => {

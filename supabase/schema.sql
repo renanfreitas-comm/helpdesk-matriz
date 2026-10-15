@@ -1155,6 +1155,168 @@ drop trigger if exists tarefas_notificar on public.tarefas;
 create trigger tarefas_notificar after insert or update on public.tarefas
   for each row execute function public.tg_notificar_tarefas();
 
+-- ==================================================================
+-- PORTAL DO COLABORADOR (abrir chamado SEM login, pelo link com código)
+-- ==================================================================
+-- Ninguém de fora grava direto na tabela chamados: o portal só chama as
+-- duas funções abaixo, que conferem o código do link, limitam a quantidade
+-- de envios e validam cada campo.
+
+alter table public.chamados add column if not exists origem text not null default 'interno';
+alter table public.chamados drop constraint if exists chamados_origem_check;
+alter table public.chamados add constraint chamados_origem_check check (origem in ('interno', 'portal'));
+alter table public.chamados add column if not exists solicitante_nome text check (char_length(solicitante_nome) <= 120);
+alter table public.chamados add column if not exists solicitante_setor text check (char_length(solicitante_setor) <= 120);
+alter table public.chamados add column if not exists solicitante_contato text check (char_length(solicitante_contato) <= 120);
+alter table public.chamados add column if not exists codigo_acompanhamento text;
+create unique index if not exists chamados_codigo_acompanhamento_idx on public.chamados (codigo_acompanhamento) where codigo_acompanhamento is not null;
+create index if not exists chamados_origem_criado_idx on public.chamados (origem, criado_em desc);
+
+create sequence if not exists public.portal_numero_seq;
+
+-- Configuração do portal (uma linha só). O código vai no link: portal.html?k=<código>
+create table if not exists public.portal_config (
+  id               integer primary key default 1 check (id = 1),
+  chave            text not null default replace(gen_random_uuid()::text, '-', ''),
+  ativo            boolean not null default true,
+  limite_por_hora  integer not null default 30 check (limite_por_hora between 1 and 500),
+  atualizado_em    timestamptz not null default now()
+);
+insert into public.portal_config (id) values (1) on conflict (id) do nothing;
+
+alter table public.portal_config enable row level security;
+drop policy if exists portal_config_ler on public.portal_config;
+drop policy if exists portal_config_editar on public.portal_config;
+create policy portal_config_ler on public.portal_config for select to authenticated
+  using ((select public.eh_admin()));
+create policy portal_config_editar on public.portal_config for update to authenticated
+  using ((select public.eh_admin())) with check ((select public.eh_admin()));
+revoke all on public.portal_config from anon;
+
+-- Admin gera um código novo (o link antigo para de funcionar na hora).
+create or replace function public.portal_nova_chave()
+returns text language plpgsql security definer set search_path = public as $$
+declare nova text := replace(gen_random_uuid()::text, '-', '');
+begin
+  if not public.eh_admin() then
+    raise exception 'Apenas o supervisor/admin pode trocar o código do portal.' using errcode = '42501';
+  end if;
+  update portal_config set chave = nova, atualizado_em = now() where id = 1;
+  return nova;
+end $$;
+revoke execute on function public.portal_nova_chave() from public, anon;
+grant execute on function public.portal_nova_chave() to authenticated;
+
+create or replace function public.abrir_chamado_portal(
+  p_chave text, p_nome text, p_setor text, p_contato text,
+  p_categoria text, p_descricao text, p_impacto text, p_armadilha text default ''
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  cfg        portal_config;
+  nome       text := btrim(coalesce(p_nome, ''));
+  setor      text := btrim(coalesce(p_setor, ''));
+  contato    text := btrim(coalesce(p_contato, ''));
+  descricao  text := btrim(coalesce(p_descricao, ''));
+  rotulos    jsonb := '{"impressora":"Impressora","computador":"Computador","rede":"Internet / Wi-Fi","acesso":"Acesso / senha","telefonia":"Telefone","sistemas":"Sistemas / e-mail","outro":"Outro"}';
+  prioridade text := case p_impacto when 'alto' then 'alta' when 'medio' then 'media' else 'baixa' end;
+  existente  chamados;
+  novo       chamados;
+  u          record;
+begin
+  select * into cfg from portal_config where id = 1;
+  if not found or not cfg.ativo then
+    return jsonb_build_object('ok', false, 'motivo', 'desativado');
+  end if;
+  if coalesce(p_chave, '') <> cfg.chave then
+    return jsonb_build_object('ok', false, 'motivo', 'link_invalido');
+  end if;
+  -- Campo escondido no formulário: pessoa nunca preenche, robô sim.
+  if coalesce(p_armadilha, '') <> '' then
+    return jsonb_build_object('ok', false, 'motivo', 'invalido');
+  end if;
+  if char_length(nome) not between 2 and 120 or char_length(setor) not between 1 and 120
+     or char_length(contato) > 120 or char_length(descricao) not between 5 and 2000
+     or not (rotulos ? coalesce(p_categoria, '')) or coalesce(p_impacto, '') not in ('baixo', 'medio', 'alto') then
+    return jsonb_build_object('ok', false, 'motivo', 'dados_invalidos');
+  end if;
+
+  -- Envio repetido (duplo clique / F5): devolve o mesmo chamado.
+  select * into existente from chamados
+   where origem = 'portal' and solicitante_nome = nome and position(left(descricao, 200) in atividade) > 0
+     and criado_em > now() - interval '15 minutes'
+   order by criado_em desc limit 1;
+  if found then
+    return jsonb_build_object('ok', true, 'numero', existente.numero, 'codigo', existente.codigo_acompanhamento, 'repetido', true);
+  end if;
+
+  -- Limite de envios (protege contra spam/link vazado).
+  if (select count(*) from chamados where origem = 'portal' and criado_em > now() - interval '1 hour') >= cfg.limite_por_hora
+     or (select count(*) from chamados where origem = 'portal' and criado_em > now() - interval '1 minute') >= 5 then
+    return jsonb_build_object('ok', false, 'motivo', 'limite');
+  end if;
+
+  insert into chamados (numero, area, atividade, prioridade, status, responsavel_uid,
+                        criado_por_uid, criado_por_nome, criado_em, atualizado_em,
+                        origem, solicitante_nome, solicitante_setor, solicitante_contato, codigo_acompanhamento)
+  values ('P' || to_char(now() at time zone 'America/Sao_Paulo', 'YYMM') || '-' || lpad(nextval('portal_numero_seq')::text, 4, '0'),
+          setor, '[' || (rotulos ->> p_categoria) || '] ' || descricao, prioridade, 'aberto', null,
+          null, 'Portal: ' || nome, now(), now(),
+          'portal', nome, setor, nullif(contato, ''),
+          replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''))
+  returning * into novo;
+
+  -- Sem login, os gatilhos não registram nada: grava a criação e avisa o time.
+  if auth.uid() is null then
+    insert into chamado_eventos (chamado_id, tipo, texto, autor_uid, autor_nome)
+    values (novo.id, 'criacao', 'Chamado aberto pelo portal por ' || nome || ' (' || setor || ')'
+                                || coalesce(' · contato: ' || nullif(contato, ''), ''), null, 'Portal');
+    for u in select id from usuarios where papel <> 'painel' and not ausente_no_dia(id) loop
+      insert into notificacoes (usuario_id, tipo, titulo, texto, link, autor_nome)
+      values (u.id, 'novo_chamado', 'Novo chamado pelo portal: ' || novo.numero,
+              left(setor || ' · ' || nome || ' · ' || descricao, 300), 'chamados.html#c=' || novo.id, 'Portal');
+    end loop;
+  end if;
+
+  return jsonb_build_object('ok', true, 'numero', novo.numero, 'codigo', novo.codigo_acompanhamento);
+end $$;
+revoke execute on function public.abrir_chamado_portal(text, text, text, text, text, text, text, text) from public;
+grant execute on function public.abrir_chamado_portal(text, text, text, text, text, text, text, text) to anon, authenticated;
+
+-- Acompanhamento: só quem tem o código (vai no link) vê o andamento.
+-- Mostra apenas o necessário: status, quem atende (primeiro nome) e as
+-- etapas. Anotações internas da TI não aparecem.
+create or replace function public.consultar_chamado_portal(p_codigo text)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select case when c.id is null then jsonb_build_object('ok', false) else jsonb_build_object(
+    'ok', true,
+    'numero', c.numero,
+    'status', c.status,
+    'prioridade', c.prioridade,
+    'descricao', c.atividade,
+    'setor', c.solicitante_setor,
+    'solicitante', c.solicitante_nome,
+    'criado_em', c.criado_em,
+    'resolvido_em', c.resolvido_em,
+    'responsavel', split_part(coalesce(c.responsavel_nome, ''), ' ', 1),
+    'etapas', coalesce((
+      select jsonb_agg(jsonb_build_object('tipo', e.tipo, 'quando', e.criado_em,
+               'texto', case e.tipo
+                 when 'criacao' then 'Recebido pela TI'
+                 when 'atribuicao' then case when c2.responsavel_nome is null then 'Aguardando técnico'
+                                             else 'Técnico designado' end
+                 when 'status' then replace(replace(replace(e.texto, 'Status: ', ''), 'Em andamento', 'Em atendimento'), '→', '→')
+               end) order by e.criado_em)
+      from chamado_eventos e, chamados c2
+      where c2.id = c.id and e.chamado_id = c.id and e.tipo in ('criacao', 'atribuicao', 'status')
+    ), '[]'::jsonb)
+  ) end
+  from (select 1) x
+  left join chamados c on c.codigo_acompanhamento = p_codigo and c.origem = 'portal'
+                       and char_length(coalesce(p_codigo, '')) >= 32;
+$$;
+revoke execute on function public.consultar_chamado_portal(text) from public;
+grant execute on function public.consultar_chamado_portal(text) to anon, authenticated;
+
 -- ====================================================== REALTIME (telas ao vivo)
 do $$
 declare t text;

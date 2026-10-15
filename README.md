@@ -293,6 +293,17 @@ Faça **nesta ordem**:
 2. **Banco:** rode o `supabase/schema.sql` inteiro no **SQL Editor** (cria as tabelas solucoes, agenda_eventos e notificacoes e liga o tempo real nelas).
 3. Todos dão **Ctrl+F5** uma vez.
 
+### Outubro/2026 — Portal do colaborador (chamado sem login)
+
+Qualquer pessoa da empresa abre chamado **sem login** pelo link `portal.html?k=<código>` (ou pelo QR code). O chamado entra em **Sem responsável**, com o selo "📨 Portal" e o nome/setor/contato de quem abriu, e os técnicos são avisados no sino. Quem abriu recebe um número e um link para acompanhar (Recebido → Em atendimento → Resolvido); as anotações internas da TI **não** aparecem para ele.
+
+Proteções: o código do link (quem acha o site por acaso não consegue abrir chamado), limite de chamados por hora, campo anti-robô e bloqueio de envio repetido. Ninguém de fora lê ou grava a tabela de chamados: o portal só usa duas funções do banco que validam tudo.
+
+Faça **nesta ordem**:
+1. **Site:** `git add .`, `git commit -m "Portal do colaborador"`, `git push`, e espere 2 minutos.
+2. **Banco:** rode o `supabase/schema.sql` inteiro no **SQL Editor**.
+3. Em **Usuários → Portal do colaborador**: copie o link, baixe o QR code ou imprima o cartaz. Se o link vazar para fora da empresa, clique em **Gerar link novo** (o antigo para de funcionar na hora).
+
 ### Relatório de pendências das 18h
 
 Ele usa a mesma propriedade `SUPABASE_SERVICE_KEY` do backup diário. Se o backup ainda não foi ligado, siga o passo 1 de "Backup diário" antes.

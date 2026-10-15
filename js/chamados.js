@@ -165,7 +165,7 @@ function renderizarTabela() {
     if (fPrioridade && c.prioridade !== fPrioridade) return false;
     if (fResponsavel && c.responsavelUid !== fResponsavel) return false;
     if (busca) {
-      const alvo = `${c.numero || ""} ${c.area || ""} ${c.atividade || ""} ${c.responsavelNome || ""}`.toLowerCase();
+      const alvo = `${c.numero || ""} ${c.area || ""} ${c.atividade || ""} ${c.responsavelNome || ""} ${c.solicitanteNome || ""}`.toLowerCase();
       if (!alvo.includes(busca)) return false;
     }
     return true;
@@ -193,7 +193,7 @@ function renderizarTabela() {
     const meu = c.responsavelUid === usuarioAtual.uid;
     return `
       <tr class="${situacaoPrazo(c).atrasado ? "linha-atrasada" : ""}">
-        <td data-rotulo="Chamado"><a href="#c=${encodeURIComponent(c.id)}" class="link-detalhe" data-id="${c.id}"><strong>${escaparHTML(c.numero || "(sem número)")}</strong></a><br><span class="texto-suave">${escaparHTML(truncar(c.atividade, 70))}</span></td>
+        <td data-rotulo="Chamado"><a href="#c=${encodeURIComponent(c.id)}" class="link-detalhe" data-id="${c.id}"><strong>${escaparHTML(c.numero || "(sem número)")}</strong></a><br><span class="texto-suave">${escaparHTML(truncar(c.atividade, 70))}</span>${seloPortal(c)}</td>
         <td data-rotulo="Área">${escaparHTML(c.area || "—")}</td>
         <td data-rotulo="Prioridade"><span class="badge badge-prioridade-${c.prioridade}">${ROTULOS_PRIORIDADE[c.prioridade] || c.prioridade}</span></td>
         <td data-rotulo="Prazo">${badgePrazo(c)}</td>
@@ -303,6 +303,7 @@ function cardQuadro(c) {
     <article class="card-quadro ${sit.atrasado ? "atrasado" : ""}" data-id="${c.id}" tabindex="0"
              draggable="${podeMover(c) ? "true" : "false"}" title="${podeMover(c) ? "Arraste para mudar o status, clique para ver detalhes" : "Toque para ver detalhes"}">
       <span class="badge badge-prioridade-${c.prioridade}">${ROTULOS_PRIORIDADE[c.prioridade] || c.prioridade}</span>
+      ${seloPortal(c)}
       <strong class="card-quadro-titulo">${escaparHTML(c.numero || "(sem número)")} · ${escaparHTML(c.area || "—")}</strong>
       <span class="card-quadro-texto">${escaparHTML(truncar(c.atividade, 90))}</span>
       <span class="card-quadro-rodape">
@@ -509,7 +510,10 @@ function renderizarDetalhe() {
   document.getElementById("detalhe-info").innerHTML = `
     <div><dt>Área</dt><dd>${escaparHTML(c.area || "—")}</dd></div>
     <div><dt>Responsável</dt><dd>${escaparHTML(c.responsavelNome || "Não atribuído")}</dd></div>
-    <div><dt>Aberto por</dt><dd>${escaparHTML(c.criadoPorNome || "—")}</dd></div>
+    ${c.origem === "portal"
+      ? `<div><dt>Solicitante (portal)</dt><dd>${escaparHTML(c.solicitanteNome || "—")}${c.solicitanteSetor ? " · " + escaparHTML(c.solicitanteSetor) : ""}</dd></div>
+         ${c.solicitanteContato ? `<div><dt>Contato</dt><dd>${escaparHTML(c.solicitanteContato)}</dd></div>` : ""}`
+      : `<div><dt>Aberto por</dt><dd>${escaparHTML(c.criadoPorNome || "—")}</dd></div>`}
     <div><dt>Aberto em</dt><dd>${formatarDataHora(c.criadoEm)}</dd></div>
     ${c.resolvidoEm ? `<div><dt>Resolvido em</dt><dd>${formatarDataHora(c.resolvidoEm)}</dd></div>` : ""}`;
   document.getElementById("detalhe-atividade").textContent = c.atividade || "";
@@ -601,6 +605,12 @@ document.getElementById("form-comentario").addEventListener("submit", async (e) 
 document.getElementById("comentario-texto").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) document.getElementById("form-comentario").requestSubmit();
 });
+
+// Chamado aberto pelo portal do colaborador (sem login).
+function seloPortal(c) {
+  if (c.origem !== "portal") return "";
+  return `<span class="selo-portal" title="Aberto pelo portal do colaborador">📨 Portal · ${escaparHTML((c.solicitanteNome || "").split(" ")[0])}</span>`;
+}
 
 // -------------------- Utilitários --------------------
 function escaparHTML(texto) {

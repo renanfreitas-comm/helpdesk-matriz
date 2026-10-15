@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Abrir chamado para a TI — Comm</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="portal">
+
+  <header class="portal-topo">
+    <img src="assets/logo-comm-branco.png" alt="Comm" />
+    <span>Suporte de TI</span>
+  </header>
+
+  <main class="portal-corpo">
+
+    <!-- Sem link válido -->
+    <section class="portal-card" id="portal-sem-link" hidden>
+      <h1>Abrir chamado para a TI</h1>
+      <p class="texto-suave">Abra esta página pelo link ou pelo QR code que a TI divulgou. Se não tiver, fale com a equipe de TI.</p>
+    </section>
+
+    <!-- Formulário -->
+    <section class="portal-card" id="portal-form-card" hidden>
+      <h1>Abrir chamado para a TI</h1>
+      <p class="texto-suave portal-sub">Leva 1 minuto. Você recebe um número e acompanha tudo por aqui.</p>
+
+      <form id="portal-form" novalidate>
+        <div class="campo">
+          <label>O que está acontecendo?</label>
+          <div class="portal-categorias" id="portal-categorias"></div>
+        </div>
+
+        <div class="campo">
+          <label for="portal-descricao">Descreva em poucas palavras</label>
+          <textarea id="portal-descricao" rows="3" maxlength="2000" placeholder="Ex.: a impressora do 2º andar não imprime desde cedo"></textarea>
+        </div>
+
+        <div class="linha-dupla">
+          <div class="campo">
+            <label for="portal-nome">Seu nome</label>
+            <input type="text" id="portal-nome" maxlength="120" autocomplete="name" />
+          </div>
+          <div class="campo">
+            <label for="portal-setor">Setor</label>
+            <input type="text" id="portal-setor" maxlength="120" placeholder="Ex.: RH, Financeiro" />
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="portal-contato">Ramal, celular ou e-mail <span class="texto-suave">(opcional)</span></label>
+          <input type="text" id="portal-contato" maxlength="120" />
+        </div>
+
+        <div class="campo">
+          <label>Isso está te impedindo de trabalhar?</label>
+          <div class="seletor-botoes portal-impacto" id="portal-impacto">
+            <button type="button" data-valor="baixo">Não, dá para esperar</button>
+            <button type="button" data-valor="medio" class="ativo">Atrapalha bastante</button>
+            <button type="button" data-valor="alto">Parei totalmente</button>
+          </div>
+        </div>
+
+        <!-- Campo armadilha para robôs: pessoas não veem nem preenchem -->
+        <div class="portal-armadilha" aria-hidden="true">
+          <label for="portal-site">Site</label>
+          <input type="text" id="portal-site" tabindex="-1" autocomplete="off" />
+        </div>
+
+        <p class="erro-msg" id="portal-erro"></p>
+        <button type="submit" class="botao-primario botao-bloco" id="portal-enviar">Enviar chamado</button>
+      </form>
+
+      <div class="portal-meus" id="portal-meus" hidden>
+        <h2>Seus chamados recentes neste aparelho</h2>
+        <ul id="portal-meus-lista"></ul>
+      </div>
+    </section>
+
+    <!-- Acompanhamento -->
+    <section class="portal-card" id="portal-acompanhar" hidden>
+      <p class="portal-enviado" id="portal-enviado" hidden>✓ Chamado enviado! Guarde este link para acompanhar.</p>
+      <h1 id="acomp-titulo">Seu chamado</h1>
+      <p class="texto-suave" id="acomp-descricao"></p>
+      <div class="portal-status" id="acomp-status"></div>
+      <ol class="portal-etapas" id="acomp-etapas"></ol>
+      <div class="portal-acoes">
+        <button type="button" class="botao-secundario" id="acomp-copiar">Copiar link de acompanhamento</button>
+        <a class="botao-primario" id="acomp-novo" href="#" hidden>Abrir outro chamado</a>
+      </div>
+      <p class="texto-suave portal-rodape">A página atualiza sozinha. Para falar com a TI, use o ramal ou o contato de sempre.</p>
+    </section>
+
+  </main>
+
+  <script type="module" src="js/portal.js"></script>
+</body>
+</html>

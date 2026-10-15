@@ -35,6 +35,33 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Portal do colaborador (abrir chamado sem login) -->
+    <section class="card portal-admin" id="portal-admin">
+      <div class="portal-admin-texto">
+        <h2>Portal do colaborador</h2>
+        <p class="texto-suave">Qualquer pessoa da empresa abre chamado <strong>sem login</strong> por este link ou pelo QR code. O chamado cai em "Sem responsável" e os técnicos são avisados no sino. Quem abriu acompanha pelo número.</p>
+        <div class="campo">
+          <label for="portal-link">Link do portal</label>
+          <div class="portal-link-linha">
+            <input type="text" id="portal-link" readonly value="Carregando..." />
+            <button type="button" class="botao-secundario" id="portal-copiar">Copiar</button>
+          </div>
+        </div>
+        <div class="portal-admin-opcoes">
+          <label class="alternar"><input type="checkbox" id="portal-ativo"> Portal ligado</label>
+          <label class="portal-limite">Até <input type="number" id="portal-limite" min="1" max="500" /> chamados por hora</label>
+        </div>
+        <div class="acoes-tabela">
+          <button type="button" class="botao-secundario" id="portal-abrir">Abrir o portal</button>
+          <button type="button" class="botao-secundario" id="portal-baixar-qr">Baixar QR code</button>
+          <button type="button" class="botao-secundario" id="portal-imprimir">Imprimir cartaz</button>
+          <button type="button" class="botao-perigo" id="portal-nova-chave" title="O link e o QR antigos param de funcionar">Gerar link novo</button>
+        </div>
+        <p class="texto-suave" id="portal-msg" style="font-size:12.5px;margin:8px 0 0"></p>
+      </div>
+      <div class="portal-admin-qr"><div id="portal-qr"></div><small class="texto-suave">Cole na mesa, na parede ou no ramal</small></div>
+    </section>
   </main>
 
   <!-- Modal: novo usuário -->
@@ -77,6 +104,7 @@
     </div>
   </div>
 
+  <script src="js/vendor/qrcode.js"></script>
   <script type="module" src="js/usuarios.js"></script>
 </body>
 </html>
