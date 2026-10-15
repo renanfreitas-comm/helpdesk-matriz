@@ -14,7 +14,7 @@ const form = document.getElementById("form-usuario");
 
 protegerPagina((user, perfil) => {
   usuarioLogadoUid = user.uid;
-  montarNav(perfil);
+  montarNav(perfil, user);
 
   observar("usuarios", (q) => q.order("nome"), (linhas) => {
     listaUsuarios = linhas.map((u) => ({ uid: u.id, ...u }));

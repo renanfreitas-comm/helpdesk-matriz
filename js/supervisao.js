@@ -14,7 +14,7 @@ const ROTULOS_STATUS_ATIVIDADE = { concluido: "Concluído", andamento: "Em andam
 const CLASSES_STATUS_ATIVIDADE = { concluido: "badge-status-resolvido", andamento: "badge-status-andamento", pendente: "badge-status-aberto" };
 
 protegerPagina(async (user, perfil) => {
-  montarNav(perfil);
+  montarNav(perfil, user);
 
   usuarios = await listarUsuarios();
   popularSelectTecnicos();

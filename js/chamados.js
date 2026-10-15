@@ -38,7 +38,7 @@ const ehAdmin = () => perfilAtual.papel === "admin";
 protegerPagina(async (user, perfil) => {
   usuarioAtual = user;
   perfilAtual = perfil;
-  montarNav(perfil);
+  montarNav(perfil, user);
 
   // Técnico abre a tela já vendo os chamados dele.
   if (!ehAdmin()) definirVisao("meus", false);

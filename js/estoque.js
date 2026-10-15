@@ -36,7 +36,7 @@ const CLASSES_SITUACAO = {
 protegerPagina((user, perfil) => {
   usuarioAtual = user;
   perfilAtual = perfil;
-  montarNav(perfil);
+  montarNav(perfil, user);
   carregarUsuarios().then(() => {
     observarItens();
   });
@@ -62,6 +62,7 @@ function observarItens() {
   observar("itens_estoque", (q) => q.order("equipamento"), (linhas) => {
     listaItens = linhas;
     renderizarTabela();
+    abrirPeloEndereco();
   }, (erro) => {
     tabelaBody.innerHTML = `<tr><td colspan="11" class="vazio">Erro ao carregar estoque: ${escaparHTML(erro.message)}</td></tr>`;
   });
@@ -260,4 +261,18 @@ function formatarDataSimples(iso) {
   if (!iso) return "";
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+// -------------------- Links diretos --------------------
+// estoque.html#novo abre "Novo item"; estoque.html#i=<id> abre o item
+// (usados pelas ações rápidas e pela busca da tela inicial).
+let enderecoTratado = false;
+function abrirPeloEndereco() {
+  if (enderecoTratado) return;
+  enderecoTratado = true;
+  const h = window.location.hash;
+  history.replaceState(null, "", window.location.pathname);
+  if (h === "#novo") abrirModal("criar");
+  const m = h.match(/^#i=(.+)$/);
+  if (m && listaItens.some((x) => x.id === decodeURIComponent(m[1]))) abrirModal("editar", decodeURIComponent(m[1]));
 }

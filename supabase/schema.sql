@@ -19,6 +19,9 @@
 --     atualizou e quando o chamado foi resolvido (não dá para falsificar).
 --   * A linha do tempo de cada chamado (chamado_eventos): abertura,
 --     mudanças de status/responsável e comentários dos técnicos.
+--   * Tarefas diárias (tarefas + tarefa_conclusoes): o admin cadastra, todos
+--     veem, cada técnico marca as suas como feitas no dia; e a função
+--     relatorio_pendencias(), usada pelo e-mail automático das 18h.
 --   * O "bucket" privado "laudos" (Storage) para os laudos das visitas.
 --   * A publicação Realtime, para as telas se atualizarem sozinhas.
 -- ==========================================================================
@@ -429,6 +432,133 @@ returns boolean language sql stable security definer set search_path = public as
   );
 $$;
 
+-- ---------------------------------------------------------------- TAREFAS
+-- Cada linha é uma tarefa recorrente (ou de data única) de um técnico.
+-- O que muda dia a dia fica em tarefa_conclusoes (uma linha por dia feito).
+create or replace function public.hoje_sp()
+returns date language sql stable as $$
+  select (now() at time zone 'America/Sao_Paulo')::date;
+$$;
+
+create table if not exists public.tarefas (
+  id               text primary key default gen_random_uuid()::text,
+  titulo           text not null check (char_length(titulo) between 1 and 200),
+  descricao        text not null default '' check (char_length(descricao) <= 2000),
+  responsavel_uid  uuid references public.usuarios (id) on delete set null,
+  responsavel_nome text,
+  -- diaria = todo dia | dias_uteis = seg a sex | semanal = dias escolhidos | unica = uma data
+  recorrencia      text not null default 'dias_uteis'
+                   check (recorrencia in ('diaria', 'dias_uteis', 'semanal', 'unica')),
+  dias_semana      smallint[] not null default '{}'    -- 0 = domingo ... 6 = sábado (para "semanal")
+                   check (dias_semana <@ array[0,1,2,3,4,5,6]::smallint[]),
+  data_unica       date,
+  ativa            boolean not null default true,
+  ordem            integer not null default 0,
+  criado_por_uid   uuid,
+  criado_por_nome  text,
+  criado_em        timestamptz not null default now(),
+  atualizado_em    timestamptz not null default now(),
+  check (recorrencia <> 'semanal' or cardinality(dias_semana) > 0),
+  check (recorrencia <> 'unica' or data_unica is not null)
+);
+create index if not exists tarefas_responsavel_idx on public.tarefas (responsavel_uid);
+
+create table if not exists public.tarefa_conclusoes (
+  id                 bigint generated always as identity primary key,
+  tarefa_id          text not null references public.tarefas (id) on delete cascade,
+  data               date not null,
+  concluida_por_uid  uuid,
+  concluida_por_nome text,
+  concluida_em       timestamptz not null default now(),
+  observacao         text not null default '' check (char_length(observacao) <= 500),
+  unique (tarefa_id, data)
+);
+create index if not exists tarefa_conclusoes_data_idx on public.tarefa_conclusoes (data);
+
+-- A tarefa vale neste dia? (mesma regra usada no site, em js/tarefas-util.js)
+create or replace function public.tarefa_vale_no_dia(t public.tarefas, d date)
+returns boolean language sql stable as $$
+  select t.ativa and case t.recorrencia
+    when 'unica'      then d = t.data_unica
+    when 'diaria'     then (t.criado_em at time zone 'America/Sao_Paulo')::date <= d
+    when 'dias_uteis' then (t.criado_em at time zone 'America/Sao_Paulo')::date <= d
+                           and extract(isodow from d) between 1 and 5
+    when 'semanal'    then (t.criado_em at time zone 'America/Sao_Paulo')::date <= d
+                           and extract(dow from d)::smallint = any (t.dias_semana)
+    else false end;
+$$;
+
+drop trigger if exists tarefas_regras on public.tarefas;
+create trigger tarefas_regras before insert or update on public.tarefas
+  for each row execute function public.tg_autoria();
+
+create or replace function public.tg_tarefas_responsavel()
+returns trigger language plpgsql as $$
+begin
+  new.responsavel_nome := case when new.responsavel_uid is null then null
+                               else public.nome_usuario(new.responsavel_uid) end;
+  return new;
+end $$;
+drop trigger if exists tarefas_responsavel on public.tarefas;
+create trigger tarefas_responsavel before insert or update on public.tarefas
+  for each row execute function public.tg_tarefas_responsavel();
+
+-- Quem concluiu e quando: sempre de quem está logado.
+create or replace function public.tg_tarefa_conclusoes()
+returns trigger language plpgsql as $$
+begin
+  if auth.uid() is not null then
+    new.concluida_por_uid := auth.uid();
+    new.concluida_por_nome := public.meu_nome();
+    new.concluida_em := now();
+  end if;
+  return new;
+end $$;
+drop trigger if exists tarefa_conclusoes_autor on public.tarefa_conclusoes;
+create trigger tarefa_conclusoes_autor before insert on public.tarefa_conclusoes
+  for each row execute function public.tg_tarefa_conclusoes();
+
+-- Técnico só conclui as próprias tarefas e só no dia de hoje; admin, qualquer uma.
+create or replace function public.pode_concluir_tarefa(p_tarefa text, p_data date)
+returns boolean language sql stable security definer set search_path = public as $$
+  select public.eh_admin()
+      or (p_data = public.hoje_sp()
+          and exists (select 1 from public.tarefas t
+                      where t.id = p_tarefa and t.responsavel_uid = auth.uid()));
+$$;
+
+-- Relatório de pendências do dia, por pessoa (tarefas não concluídas +
+-- chamados em aberto). Usado só pelo Apps Script com a chave de serviço.
+create or replace function public.relatorio_pendencias(p_data date default null)
+returns jsonb language sql stable security definer set search_path = public as $$
+  with dia as (select coalesce(p_data, public.hoje_sp()) as d)
+  select coalesce(jsonb_agg(p order by p->>'nome'), '[]'::jsonb)
+  from (
+    select jsonb_build_object(
+      'uid', u.id, 'nome', u.nome, 'email', u.email, 'papel', u.papel,
+      'data', (select d from dia),
+      'tarefas_total', (select count(*) from public.tarefas t, dia
+                        where t.responsavel_uid = u.id and public.tarefa_vale_no_dia(t, dia.d)),
+      'tarefas_pendentes', coalesce((
+        select jsonb_agg(jsonb_build_object('titulo', t.titulo, 'descricao', t.descricao) order by t.ordem, t.titulo)
+        from public.tarefas t, dia
+        where t.responsavel_uid = u.id and public.tarefa_vale_no_dia(t, dia.d)
+          and not exists (select 1 from public.tarefa_conclusoes c where c.tarefa_id = t.id and c.data = dia.d)
+      ), '[]'::jsonb),
+      'chamados_abertos', coalesce((
+        select jsonb_agg(jsonb_build_object('numero', c.numero, 'area', c.area, 'status', c.status,
+                                            'prioridade', c.prioridade, 'atividade', left(c.atividade, 150),
+                                            'criado_em', c.criado_em) order by c.criado_em)
+        from public.chamados c
+        where c.responsavel_uid = u.id and c.status <> 'resolvido'
+      ), '[]'::jsonb)
+    ) as p
+    from public.usuarios u
+  ) s;
+$$;
+revoke execute on function public.relatorio_pendencias(date) from public, anon, authenticated;
+grant execute on function public.relatorio_pendencias(date) to service_role;
+
 -- ===================================================== REGRAS DE ACESSO (RLS)
 alter table public.usuarios          enable row level security;
 alter table public.chamados          enable row level security;
@@ -438,6 +568,8 @@ alter table public.maquinas          enable row level security;
 alter table public.maquina_historico enable row level security;
 alter table public.itens_estoque     enable row level security;
 alter table public.visitas           enable row level security;
+alter table public.tarefas           enable row level security;
+alter table public.tarefa_conclusoes enable row level security;
 
 -- Visitantes não logados não têm acesso a nada.
 revoke all on all tables in schema public from anon;
@@ -530,6 +662,26 @@ create policy visitas_editar on public.visitas for update to authenticated
 create policy visitas_excluir on public.visitas for delete to authenticated
   using ((select public.eh_admin()));
 
+-- tarefas: todos do time veem as de todos; só admin cria, edita e exclui.
+create policy tarefas_ler on public.tarefas for select to authenticated
+  using ((select public.eh_membro()));
+create policy tarefas_criar on public.tarefas for insert to authenticated
+  with check ((select public.eh_admin()));
+create policy tarefas_editar on public.tarefas for update to authenticated
+  using ((select public.eh_admin())) with check ((select public.eh_admin()));
+create policy tarefas_excluir on public.tarefas for delete to authenticated
+  using ((select public.eh_admin()));
+
+-- tarefa_conclusoes: todos veem; técnico marca/desmarca as próprias só no
+-- dia de hoje; admin marca/desmarca qualquer uma, em qualquer data.
+create policy conclusoes_ler on public.tarefa_conclusoes for select to authenticated
+  using ((select public.eh_membro()));
+create policy conclusoes_marcar on public.tarefa_conclusoes for insert to authenticated
+  with check ((select public.eh_membro()) and public.pode_concluir_tarefa(tarefa_id, data));
+create policy conclusoes_desmarcar on public.tarefa_conclusoes for delete to authenticated
+  using ((select public.eh_admin())
+         or (concluida_por_uid = auth.uid() and data = public.hoje_sp()));
+
 -- ================================================ STORAGE: LAUDOS DAS VISITAS
 -- Bucket privado: os links são temporários (gerados na hora de abrir).
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -562,7 +714,8 @@ create policy laudos_excluir on storage.objects for delete to authenticated
 do $$
 declare t text;
 begin
-  foreach t in array array['usuarios', 'chamados', 'chamado_eventos', 'relatorios', 'maquinas',
+  foreach t in array array['usuarios', 'chamados', 'chamado_eventos', 'tarefas', 'tarefa_conclusoes',
+                           'relatorios', 'maquinas',
                            'maquina_historico', 'itens_estoque', 'visitas'] loop
     if not exists (
       select 1 from pg_publication_tables

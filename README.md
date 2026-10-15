@@ -13,7 +13,7 @@ Estrutura de arquivos:
 
 ```
 helpdesk-matriz/
-├── index.html / dashboard.html / chamados.html / relatorios.html
+├── index.html / dashboard.html / chamados.html / tarefas.html / relatorios.html
 ├── visitas.html / maquinas.html / estoque.html
 ├── usuarios.html / supervisao.html     # somente admin
 ├── redefinir-senha.html                # "Esqueci minha senha" e "Trocar senha"
@@ -25,12 +25,13 @@ helpdesk-matriz/
 │   ├── auth.js              # login, proteção de páginas, funções de admin
 │   ├── sla.js               # prazos por prioridade (edite aqui para mudar)
 │   ├── acoes-chamado.js     # botões rápidos Assumir / Iniciar / Resolver
+│   ├── tarefas-util.js      # regra de repetição das tarefas (igual à do banco)
 │   ├── apps-script-config.js
 │   └── (uma .js por tela)
 ├── supabase/
 │   ├── schema.sql                        # tabelas, regras de acesso, gatilhos, Storage
 │   └── functions/admin-usuarios/index.ts # criar/excluir usuários e trocar senhas (servidor)
-├── apps-script/Codigo.gs                 # e-mails + backup diário (script.google.com)
+├── apps-script/Codigo.gs                 # e-mails, relatório das 18h e backup diário (script.google.com)
 └── migracao/                             # cópia única dos dados do Firebase
 ```
 
@@ -42,6 +43,26 @@ helpdesk-matriz/
 - **Estoque**: controle dos equipamentos que passam pela TI (chegada, configuração e saída), no mesmo formato da planilha usada pela equipe — cada item registra equipamento, S/N, ativo, data de chegada, delegação, prioridade, data de saída, técnico responsável, loja/setor e situação (Recebido, Em configuração, Aguardando peça, Concluído ou Entregue). Não há controle de quantidade/estoque mínimo nesta versão — é um registro individual por equipamento.
 - **Usuários** (somente admin): não existe cadastro público — só um admin cria novas contas por aqui (nome, e-mail, senha temporária e papel), além de promover/rebaixar técnicos e admins.
 - **Supervisão** (somente admin): visão consolidada dos relatórios diários de todo o time (com a mesma tabela de atividades), filtrável por técnico e por período, com um resumo de produtividade (chamados resolvidos + relatórios enviados) por pessoa.
+
+### Tela inicial e menu lateral
+
+- **Menu lateral** em todas as páginas, com ícones e contadores: quantos chamados em aberto estão com você e quantas tarefas suas faltam hoje. No celular, o menu abre pelo botão ☰. Técnicos não veem Supervisão e Usuários.
+- **Tela inicial (Início):**
+  - **busca geral** em chamados, máquinas (nome, nº de série, patrimônio), estoque, visitas e pessoas. Funciona com **Ctrl+K** de qualquer página, e Enter abre o item direto;
+  - **ações rápidas:** Abrir chamado, Minhas tarefas, Relatório do dia, Registrar visita e Entrada no estoque;
+  - **cartões dos módulos** agrupados (Atendimento, Inventário, Registros e gestão), cada um com informações ao vivo;
+  - **Meu dia:** suas tarefas de hoje e seus chamados em aberto, para marcar ali mesmo. Ao lado, os chamados **esperando alguém assumir**;
+  - **indicadores do time** no fim da página.
+- **Links diretos:** `estoque.html#novo`, `visitas.html#novo`, `maquinas.html#m=<id>`, `estoque.html#i=<id>`, `visitas.html#v=<id>` e `tarefas.html#minhas`.
+
+### Tarefas do dia
+
+- O **admin** cadastra as tarefas de rotina de cada pessoa em **Tarefas → + Nova tarefa**: título, "como fazer" e para quem (dá para marcar vários técnicos de uma vez). Cada tarefa se repete **todo dia**, só em **dias úteis**, em **dias da semana escolhidos** (ex.: seg e sex) ou numa **data única**.
+- **Todos veem as tarefas de todos**, separadas por pessoa e com o progresso do dia ("3/5"). Só os admins criam, editam, pausam e excluem tarefas (em **Gerenciar tarefas**).
+- **Cada técnico marca as suas** como feitas, no dia de hoje. Fica registrado quem marcou e a que horas. Dias anteriores ficam só para consulta (o admin ainda pode corrigir).
+- **Chamados como tarefas:** os chamados em aberto de cada pessoa aparecem no mesmo quadro. Marcar um deles é **resolver o chamado**, e o site pergunta o que foi feito.
+- No **Dashboard**, o painel **Minhas tarefas de hoje** permite marcar sem sair da tela inicial.
+- **Relatório do fim do dia:** de segunda a sexta, às 18h, cada técnico com pendências recebe um e-mail só com as dele (tarefas não concluídas + chamados em aberto), e os admins recebem o resumo de todo o time. Para ligar, veja "Relatório de pendências das 18h" mais abaixo.
 
 ### Feito para o dia a dia do técnico
 
@@ -205,6 +226,28 @@ Apagar o arquivo `chave-firebase.json` do computador **não** desativa a chave: 
 2. Exclua a chave criada no dia da migração.
 
 Quando não precisar mais do Firebase, você pode excluir o projeto inteiro em **Configurações do projeto → Geral → Excluir projeto**.
+
+---
+
+### Outubro/2026 — módulo de Tarefas (fazer uma vez)
+
+1. **Banco:** rode de novo o `supabase/schema.sql` inteiro no **SQL Editor**. Ele cria as tabelas de tarefas e a função do relatório, sem apagar dados.
+2. **Site:** copie os arquivos novos para a pasta do repositório e rode `git add .`, `git commit -m "Módulo de tarefas"` e `git push`.
+3. **Apps Script:** cole o `apps-script/Codigo.gs` novo, publique uma **nova versão** e ligue o relatório (abaixo).
+
+### Outubro/2026 — tela inicial e menu lateral
+
+Só arquivos do site, sem mudança no banco: copie os arquivos para a pasta do repositório e faça `git add .`, `git commit -m "Nova tela inicial e menu lateral"` e `git push`.
+
+### Relatório de pendências das 18h
+
+Ele usa a mesma propriedade `SUPABASE_SERVICE_KEY` do backup diário. Se o backup ainda não foi ligado, siga o passo 1 de "Backup diário" antes.
+
+1. No Apps Script, em ⚙️ **Configurações do projeto**, confira se o **fuso horário** é *(GMT-03:00) Horário de Brasília*.
+2. Execute **`testarRelatorioPendencias`**. Ele manda o relatório de hoje **só para você**, com "[TESTE]" no assunto, para conferir como fica.
+3. Execute **`instalarRelatorioPendencias`**. A partir daí o relatório sai sozinho todo dia útil por volta das 18h (o Google dispara dentro da janela das 18h às 19h).
+
+Para mudar o horário ou enviar também no fim de semana, altere `HORA_RELATORIO_PENDENCIAS` e `RELATORIO_SO_DIAS_UTEIS` no topo do arquivo, publique e rode `instalarRelatorioPendencias` de novo. Técnicos sem pendências não recebem e-mail; os admins sempre recebem o resumo.
 
 ---
 

@@ -3,100 +3,77 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard — Help Desk Matriz</title>
+  <title>Início — Help Desk Matriz</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
-<body>
+<body class="com-menu">
 
-  <header class="app-header">
-    <div class="logo">
-      <img src="assets/logo-comm.png" alt="Comm" class="logo-principal" />
-      <span class="selo-setor">Tecnologia da Informação</span>
-    </div>
-    <nav class="app-nav">
-      <a class="nav-link" href="dashboard.html">Dashboard</a>
-      <a class="nav-link" href="chamados.html">Chamados</a>
-      <a class="nav-link" href="relatorios.html">Relatórios</a>
-      <a class="nav-link" href="visitas.html">Visitas</a>
-      <a class="nav-link" href="maquinas.html">Máquinas</a>
-      <a class="nav-link" href="estoque.html">Estoque</a>
-      <a class="nav-link" id="nav-link-usuarios" href="usuarios.html" style="display:none">Usuários</a>
-      <a class="nav-link" id="nav-link-supervisao" href="supervisao.html" style="display:none">Supervisão</a>
-    </nav>
-    <div class="app-user">
-      <span class="nome" id="nav-nome">—</span>
-      <span class="badge" id="nav-papel"></span>
-      <button class="botao-secundario" id="nav-sair">Sair</button>
-    </div>
-  </header>
+  <aside id="sidebar" class="sidebar"></aside>
 
-  <main class="app-main">
-    <div class="topo-pagina">
-      <h1 id="saudacao">Visão geral</h1>
-      <div class="atalhos">
-        <a class="botao-primario" href="chamados.html#novo">+ Novo chamado</a>
-        <a class="botao-secundario" href="relatorios.html#novo">Relatório do dia</a>
+  <main class="app-main inicio">
+
+    <!-- Boas-vindas + busca geral -->
+    <section class="hero">
+      <div class="hero-texto">
+        <h1 id="saudacao">Olá</h1>
+        <p id="resumo-dia">Carregando o seu dia...</p>
       </div>
-    </div>
+      <div class="busca-geral">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>
+        <input type="search" id="busca-geral" autocomplete="off" placeholder="Buscar chamado, máquina, nº de série, visita, pessoa..." aria-label="Busca geral" />
+        <kbd>Ctrl K</kbd>
+        <div class="busca-resultados" id="busca-resultados" hidden></div>
+      </div>
+    </section>
 
-    <!-- O que o técnico precisa ver primeiro -->
-    <div class="duas-colunas">
-      <section class="painel">
-        <div class="painel-topo">
-          <h2>Minha fila</h2>
-          <a href="chamados.html" class="link-suave">ver todos</a>
-        </div>
-        <div id="minha-fila"><p class="texto-suave">Carregando...</p></div>
-      </section>
+    <!-- Ações rápidas -->
+    <nav class="acoes-rapidas" id="acoes-rapidas" aria-label="Ações rápidas"></nav>
 
-      <section class="painel">
-        <div class="painel-topo">
-          <h2>Esperando alguém assumir</h2>
-          <span class="badge" id="qtd-livres">0</span>
-        </div>
-        <div id="sem-responsavel"><p class="texto-suave">Carregando...</p></div>
-      </section>
+    <div class="inicio-colunas">
+      <!-- Módulos com informações ao vivo -->
+      <div id="modulos"><p class="carregando">Carregando módulos...</p></div>
+
+      <aside class="inicio-lado">
+        <section class="painel meu-dia">
+          <div class="painel-topo">
+            <h2>Meu dia</h2>
+            <span class="texto-suave" id="meu-dia-resumo"></span>
+          </div>
+          <div class="barra-fundo barra-fina"><div class="barra-preenchida" id="meu-dia-barra" style="width:0%"></div></div>
+          <ul class="lista-tarefas" id="meu-dia"><li class="texto-suave">Carregando...</li></ul>
+        </section>
+
+        <section class="painel">
+          <div class="painel-topo">
+            <h2>Esperando alguém assumir</h2>
+            <span class="badge" id="qtd-livres">0</span>
+          </div>
+          <div id="sem-responsavel"><p class="texto-suave">Carregando...</p></div>
+        </section>
+      </aside>
     </div>
 
     <h2 class="titulo-secao">Indicadores do time</h2>
     <div class="cards-grid">
-      <div class="card destaque-aberto">
-        <div class="valor" id="card-aberto">0</div>
-        <div class="rotulo">Abertos</div>
-      </div>
-      <div class="card destaque-andamento">
-        <div class="valor" id="card-andamento">0</div>
-        <div class="rotulo">Em andamento</div>
-      </div>
-      <div class="card destaque-atrasado">
-        <div class="valor" id="card-atrasados">0</div>
-        <div class="rotulo">Atrasados</div>
-      </div>
-      <div class="card destaque-resolvido">
-        <div class="valor" id="card-resolvidos-hoje">0</div>
-        <div class="rotulo">Resolvidos hoje</div>
-      </div>
-      <div class="card">
-        <div class="valor" id="card-tempo-medio">—</div>
-        <div class="rotulo">Tempo médio p/ resolver (30 dias)</div>
-      </div>
-      <div class="card">
-        <div class="valor" id="card-no-prazo">—</div>
-        <div class="rotulo">Resolvidos no prazo (30 dias)</div>
-      </div>
+      <div class="card destaque-aberto"><div class="valor" id="card-aberto">0</div><div class="rotulo">Abertos</div></div>
+      <div class="card destaque-andamento"><div class="valor" id="card-andamento">0</div><div class="rotulo">Em andamento</div></div>
+      <div class="card destaque-atrasado"><div class="valor" id="card-atrasados">0</div><div class="rotulo">Atrasados</div></div>
+      <div class="card destaque-resolvido"><div class="valor" id="card-resolvidos-hoje">0</div><div class="rotulo">Resolvidos hoje</div></div>
+      <div class="card"><div class="valor" id="card-tempo-medio">—</div><div class="rotulo">Tempo médio p/ resolver (30 dias)</div></div>
+      <div class="card"><div class="valor" id="card-no-prazo">—</div><div class="rotulo">Resolvidos no prazo (30 dias)</div></div>
     </div>
 
-    <div class="painel">
-      <h2>Chamados por prioridade (em aberto)</h2>
-      <div id="barras-prioridade"></div>
+    <div class="duas-colunas">
+      <div class="painel">
+        <h2>Em aberto por prioridade</h2>
+        <div id="barras-prioridade"></div>
+      </div>
+      <div class="painel">
+        <h2>Em aberto por técnico</h2>
+        <div id="barras-tecnico"></div>
+      </div>
     </div>
-
-    <div class="painel">
-      <h2>Chamados por técnico responsável (em aberto)</h2>
-      <div id="barras-tecnico"></div>
-    </div>
-
-    <div class="painel">
+    <div class="painel" style="margin-top:16px;">
       <h2>Visitas técnicas por empresa responsável</h2>
       <div id="barras-visitas-empresa"></div>
     </div>

@@ -47,7 +47,7 @@ const CLASSES_STATUS = { agendada: "badge-status-andamento", realizada: "badge-s
 protegerPagina(async (user, perfil) => {
   usuarioAtual = user;
   perfilAtual = perfil;
-  montarNav(perfil);
+  montarNav(perfil, user);
 
   listaUsuarios = await listarUsuarios();
 
@@ -58,6 +58,7 @@ function observarVisitas() {
   observar("visitas", (q) => q.order("data", { ascending: false }).order("criado_em", { ascending: false }), (linhas) => {
     listaVisitas = linhas;
     renderizarTabela();
+    abrirPeloEndereco();
   }, (erro) => {
     tabelaBody.innerHTML = `<tr><td colspan="11" class="vazio">Erro ao carregar visitas: ${escaparHTML(erro.message)}</td></tr>`;
   });
@@ -410,4 +411,26 @@ function escaparHTML(texto) {
   const div = document.createElement("div");
   div.textContent = texto ?? "";
   return div.innerHTML;
+}
+
+// -------------------- Links diretos --------------------
+// visitas.html#novo abre "Nova visita"; visitas.html#v=<id> abre a visita
+// para editar (se você pode) ou filtra a lista por ela.
+let enderecoTratado = false;
+function abrirPeloEndereco() {
+  if (enderecoTratado) return;
+  enderecoTratado = true;
+  const h = window.location.hash;
+  history.replaceState(null, "", window.location.pathname);
+  if (h === "#novo") abrirModal("criar");
+  const m = h.match(/^#v=(.+)$/);
+  if (!m) return;
+  const v = listaVisitas.find((x) => x.id === decodeURIComponent(m[1]));
+  if (!v) return;
+  if (perfilAtual.papel === "admin" || v.criadoPorUid === usuarioAtual.uid) {
+    abrirModal("editar", v.id);
+  } else {
+    document.getElementById("filtro-busca-visita").value = v.titulo || "";
+    renderizarTabela();
+  }
 }

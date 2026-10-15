@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tarefas — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="com-menu">
+
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <h1>Tarefas do dia</h1>
+      <div class="atalhos apenas-admin" style="display:none">
+        <button class="botao-secundario" id="btn-gerenciar-tarefas">Gerenciar tarefas</button>
+        <button class="botao-primario" id="btn-nova-tarefa">+ Nova tarefa</button>
+      </div>
+    </div>
+
+    <!-- Navegação por dia + progresso geral -->
+    <div class="barra-dia">
+      <div class="seletor-dia">
+        <button type="button" class="botao-secundario" id="dia-anterior" title="Dia anterior">‹</button>
+        <input type="date" id="dia-escolhido" />
+        <button type="button" class="botao-secundario" id="dia-seguinte" title="Próximo dia">›</button>
+        <button type="button" class="botao-secundario" id="dia-hoje">Hoje</button>
+      </div>
+      <div class="progresso-geral">
+        <strong id="dia-titulo">—</strong>
+        <span class="texto-suave" id="resumo-geral">—</span>
+        <div class="barra-fundo"><div class="barra-preenchida" id="barra-geral" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="abas-rapidas" id="abas-tarefas">
+      <button type="button" class="aba-rapida ativa" data-visao="todos">Todo o time</button>
+      <button type="button" class="aba-rapida" data-visao="meus">Só as minhas</button>
+      <button type="button" class="aba-rapida" data-visao="pendentes">Só pendentes</button>
+      <label class="alternar"><input type="checkbox" id="mostrar-chamados" checked /> Mostrar chamados em aberto como tarefas</label>
+    </div>
+
+    <p class="texto-suave aviso-dia" id="aviso-dia"></p>
+    <div class="quadro-tarefas" id="quadro-tarefas"><p class="carregando">Carregando tarefas...</p></div>
+  </main>
+
+  <!-- Modal: nova / editar tarefa (somente admin) -->
+  <div class="modal-fundo" id="modal-tarefa">
+    <div class="modal">
+      <h2 id="modal-tarefa-titulo">Nova tarefa</h2>
+      <form class="modal-form" id="form-tarefa">
+        <input type="hidden" id="tarefa-id" />
+
+        <div class="campo">
+          <label for="tarefa-titulo">Tarefa</label>
+          <input type="text" id="tarefa-titulo" required maxlength="200" placeholder="Ex: Conferir backup do servidor" />
+        </div>
+
+        <div class="campo">
+          <label for="tarefa-descricao">Como fazer (opcional)</label>
+          <textarea id="tarefa-descricao" rows="2" maxlength="2000" placeholder="Passo a passo, onde fica, a quem avisar..."></textarea>
+        </div>
+
+        <div class="campo" id="campo-responsaveis">
+          <label>Para quem</label>
+          <div class="lista-marcar" id="tarefa-responsaveis"></div>
+          <small class="texto-suave">Marque várias pessoas para criar a mesma tarefa para cada uma.</small>
+        </div>
+
+        <div class="campo" id="campo-responsavel-unico" style="display:none">
+          <label for="tarefa-responsavel">Responsável</label>
+          <select id="tarefa-responsavel"></select>
+        </div>
+
+        <div class="campo">
+          <label for="tarefa-recorrencia">Repetir</label>
+          <select id="tarefa-recorrencia">
+            <option value="dias_uteis">Dias úteis (seg a sex)</option>
+            <option value="diaria">Todo dia (inclui fim de semana)</option>
+            <option value="semanal">Em dias da semana escolhidos</option>
+            <option value="unica">Só uma vez, numa data</option>
+          </select>
+        </div>
+
+        <div class="campo" id="campo-dias" style="display:none">
+          <label>Dias da semana</label>
+          <div class="seletor-botoes" id="tarefa-dias">
+            <button type="button" data-dia="1">Seg</button>
+            <button type="button" data-dia="2">Ter</button>
+            <button type="button" data-dia="3">Qua</button>
+            <button type="button" data-dia="4">Qui</button>
+            <button type="button" data-dia="5">Sex</button>
+            <button type="button" data-dia="6">Sáb</button>
+            <button type="button" data-dia="0">Dom</button>
+          </div>
+        </div>
+
+        <div class="campo" id="campo-data-unica" style="display:none">
+          <label for="tarefa-data-unica">Data</label>
+          <input type="date" id="tarefa-data-unica" style="max-width:200px;" />
+        </div>
+
+        <label class="alternar"><input type="checkbox" id="tarefa-ativa" checked /> Tarefa ativa</label>
+
+        <p class="erro-msg" id="tarefa-erro"></p>
+
+        <div class="modal-acoes">
+          <button type="button" class="botao-secundario" id="btn-cancelar-tarefa">Cancelar</button>
+          <button type="submit" class="botao-primario" id="btn-salvar-tarefa">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: gerenciar todas as tarefas (somente admin) -->
+  <div class="modal-fundo" id="modal-gerenciar">
+    <div class="modal modal-largo">
+      <div class="detalhe-topo">
+        <h2>Gerenciar tarefas</h2>
+        <button type="button" class="botao-secundario" id="btn-fechar-gerenciar">Fechar</button>
+      </div>
+      <div class="filtros" style="margin-top:12px;">
+        <select id="gerenciar-filtro-pessoa"><option value="">Todas as pessoas</option></select>
+      </div>
+      <div class="tabela-scroll">
+        <table>
+          <thead><tr><th>Tarefa</th><th>Responsável</th><th>Repetição</th><th>Situação</th><th>Ações</th></tr></thead>
+          <tbody id="tabela-gerenciar"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/tarefas.js"></script>
+</body>
+</html>

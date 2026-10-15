@@ -24,7 +24,7 @@ const CLASSES_STATUS_ATIVIDADE = { concluido: "badge-status-resolvido", andament
 protegerPagina(async (user, perfil) => {
   usuarioAtual = user;
   perfilAtual = perfil;
-  montarNav(perfil);
+  montarNav(perfil, user);
 
   const ehAdmin = perfil.papel === "admin";
   document.getElementById("titulo-relatorios").textContent = ehAdmin

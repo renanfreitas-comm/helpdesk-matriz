@@ -33,6 +33,14 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const NOME_REMETENTE = "Help Desk Matriz";
 
+// Endereço do site (vai como link nos e-mails).
+const SITE_URL = "https://renanfreitas-comm.github.io/helpdesk-matriz/";
+
+// Relatório de pendências do fim do dia: veja a seção "RELATÓRIO DE
+// PENDÊNCIAS" no fim do arquivo.
+const HORA_RELATORIO_PENDENCIAS = 18;        // 18h (horário de Brasília)
+const RELATORIO_SO_DIAS_UTEIS = true;        // false = envia também sáb/dom
+
 // Backup diário (opcional, recomendado): veja a seção "BACKUP" no fim do arquivo.
 const NOME_PASTA_BACKUP = "Help Desk Matriz - Backups";
 const DIAS_GUARDAR_BACKUP = 30;
@@ -164,7 +172,7 @@ function autorizar() {
 // ==========================================================================
 
 const TABELAS_BACKUP = [
-  "usuarios", "chamados", "chamado_eventos", "relatorios", "maquinas",
+  "usuarios", "chamados", "chamado_eventos", "tarefas", "tarefa_conclusoes", "relatorios", "maquinas",
   "maquina_historico", "itens_estoque", "visitas"
 ];
 
@@ -177,12 +185,16 @@ function instalarBackupDiario() {
   console.log("Backup diário instalado. Pasta: " + pastaBackup_().getUrl());
 }
 
-function backupDiario() {
+function cabecalhosServico_() {
   const chave = PropertiesService.getScriptProperties().getProperty("SUPABASE_SERVICE_KEY");
-  if (!chave) throw new Error('Falta a propriedade do script "SUPABASE_SERVICE_KEY" (veja as instruções acima).');
-
+  if (!chave) throw new Error('Falta a propriedade do script "SUPABASE_SERVICE_KEY" (veja as instruções da seção BACKUP).');
   const cabecalhos = { apikey: chave };
   if (chave.indexOf("eyJ") === 0) cabecalhos.Authorization = "Bearer " + chave; // chave service_role antiga (JWT)
+  return cabecalhos;
+}
+
+function backupDiario() {
+  const cabecalhos = cabecalhosServico_();
 
   const backup = { geradoEm: new Date().toISOString(), projeto: SUPABASE_URL, tabelas: {} };
   TABELAS_BACKUP.forEach(function (tabela) {
@@ -232,4 +244,173 @@ function pastaBackup_() {
   const pasta = achadas.hasNext() ? achadas.next() : DriveApp.createFolder(NOME_PASTA_BACKUP);
   props.setProperty("pastaBackupId", pasta.getId());
   return pasta;
+}
+
+// ==========================================================================
+// RELATÓRIO DE PENDÊNCIAS DO FIM DO DIA
+// ==========================================================================
+// De segunda a sexta, às 18h (ajuste em HORA_RELATORIO_PENDENCIAS e
+// RELATORIO_SO_DIAS_UTEIS no topo):
+//   - cada técnico com pendências recebe um e-mail só com as dele
+//     (tarefas do dia não concluídas + chamados em aberto);
+//   - os admins recebem um resumo com as pendências de todo o time.
+//
+// COMO LIGAR (uma vez só) — usa a mesma SUPABASE_SERVICE_KEY do backup:
+//   1. Confira em ⚙️ Configurações do projeto que o fuso horário é
+//      "(GMT-03:00) Horário de Brasília" (America/Sao_Paulo).
+//   2. Para ver como fica, execute "testarRelatorioPendencias": manda o
+//      relatório de hoje SÓ para você, sem incomodar o time.
+//   3. Execute "instalarRelatorioPendencias". Pronto: roda sozinho todo dia.
+// ==========================================================================
+
+function instalarRelatorioPendencias() {
+  ScriptApp.getProjectTriggers()
+    .filter(function (t) { return t.getHandlerFunction() === "relatorioPendencias"; })
+    .forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger("relatorioPendencias").timeBased()
+    .everyDays(1).atHour(HORA_RELATORIO_PENDENCIAS).inTimezone("America/Sao_Paulo").create();
+  console.log("Relatório de pendências agendado para todo dia por volta das " + HORA_RELATORIO_PENDENCIAS + "h.");
+}
+
+/** Envia o relatório de hoje só para quem está executando (teste). */
+function testarRelatorioPendencias() {
+  relatorioPendencias_({ soPara: Session.getEffectiveUser().getEmail(), ignorarFimDeSemana: true });
+}
+
+/** Chamada pelo agendamento diário. */
+function relatorioPendencias() {
+  relatorioPendencias_({});
+}
+
+function relatorioPendencias_(opcoes) {
+  const fuso = "America/Sao_Paulo";
+  const agora = new Date();
+  const diaSemana = Number(Utilities.formatDate(agora, fuso, "u")); // 1 = seg ... 7 = dom
+  if (RELATORIO_SO_DIAS_UTEIS && diaSemana >= 6 && !opcoes.ignorarFimDeSemana) {
+    console.log("Fim de semana: relatório não enviado.");
+    return;
+  }
+  const dataISO = Utilities.formatDate(agora, fuso, "yyyy-MM-dd");
+  const dataBR = Utilities.formatDate(agora, fuso, "dd/MM/yyyy");
+
+  // Pendências calculadas no banco (função relatorio_pendencias).
+  const resp = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/rpc/relatorio_pendencias", {
+    method: "post",
+    contentType: "application/json",
+    headers: cabecalhosServico_(),
+    payload: JSON.stringify({ p_data: dataISO }),
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() !== 200) {
+    throw new Error("Erro ao buscar pendências (" + resp.getResponseCode() + "): " + resp.getContentText().slice(0, 300) +
+      " — o supabase/schema.sql atualizado já foi rodado no SQL Editor?");
+  }
+  const pessoas = JSON.parse(resp.getContentText());
+
+  const comPendencia = pessoas.filter(function (p) {
+    return p.tarefas_pendentes.length > 0 || p.chamados_abertos.length > 0;
+  });
+  const admins = pessoas.filter(function (p) { return p.papel === "admin" && p.email; });
+
+  let enviados = 0;
+  const enviar = function (para, assunto, texto, html) {
+    const destino = opcoes.soPara || para;
+    if (!destino) return;
+    if (MailApp.getRemainingDailyQuota() < 1) throw new Error("Cota diária de e-mails do Google esgotada.");
+    MailApp.sendEmail({
+      to: destino,
+      subject: (opcoes.soPara ? "[TESTE] " : "") + assunto,
+      body: texto,
+      htmlBody: html,
+      name: NOME_REMETENTE
+    });
+    enviados++;
+  };
+
+  // 1) Um e-mail para cada técnico com pendências (no teste, só o primeiro).
+  const individuais = opcoes.soPara ? comPendencia.slice(0, 1) : comPendencia;
+  individuais.forEach(function (p) {
+    if (!p.email) return;
+    const corpo = blocoPessoa_(p, false);
+    enviar(p.email,
+      "Suas pendências de hoje (" + dataBR + ") — Help Desk Matriz",
+      "Olá, " + primeiroNome_(p.nome) + ".\n\nAinda está pendente para hoje:\n\n" + corpo.texto +
+        "\nAbra o site para concluir: " + SITE_URL + "tarefas.html\n",
+      '<p>Olá, ' + esc_(primeiroNome_(p.nome)) + '.</p><p>Ainda está pendente para hoje:</p>' + corpo.html +
+        '<p><a href="' + SITE_URL + 'tarefas.html">Abrir as tarefas no Help Desk</a></p>');
+  });
+
+  // 2) Resumo de todo o time para os admins.
+  const totalTarefas = pessoas.reduce(function (s, p) { return s + p.tarefas_total; }, 0);
+  const totalPendentes = pessoas.reduce(function (s, p) { return s + p.tarefas_pendentes.length; }, 0);
+  const totalChamados = pessoas.reduce(function (s, p) { return s + p.chamados_abertos.length; }, 0);
+  const cabecalho = (totalTarefas - totalPendentes) + " de " + totalTarefas + " tarefas concluídas hoje · " +
+    totalChamados + " chamado(s) em aberto com responsável.";
+
+  let texto = "Relatório de pendências — " + dataBR + "\n" + cabecalho + "\n\n";
+  let html = '<h2 style="margin:0 0 4px">Pendências do time — ' + dataBR + '</h2><p style="color:#555;margin:0 0 16px">' + esc_(cabecalho) + '</p>';
+  if (comPendencia.length === 0) {
+    texto += "Ninguém com pendências. Tudo concluído!\n";
+    html += "<p><strong>Ninguém com pendências. Tudo concluído!</strong></p>";
+  } else {
+    comPendencia.forEach(function (p) {
+      const b = blocoPessoa_(p, true);
+      texto += "== " + p.nome + " ==\n" + b.texto + "\n";
+      html += '<h3 style="margin:18px 0 4px">' + esc_(p.nome) + '</h3>' + b.html;
+    });
+  }
+  const semPendencia = pessoas.filter(function (p) { return p.tarefas_total > 0 && comPendencia.indexOf(p) === -1; });
+  if (semPendencia.length) {
+    const nomes = semPendencia.map(function (p) { return p.nome; }).join(", ");
+    texto += "Concluíram tudo: " + nomes + "\n";
+    html += '<p style="color:#15803d">Concluíram tudo: ' + esc_(nomes) + '</p>';
+  }
+  texto += "\n" + SITE_URL + "tarefas.html\n";
+  html += '<p><a href="' + SITE_URL + 'tarefas.html">Abrir as tarefas no Help Desk</a></p>';
+
+  const emailsAdmins = admins.map(function (p) { return p.email; }).join(",");
+  enviar(emailsAdmins, "Pendências do time — " + dataBR + " — Help Desk Matriz", texto, html);
+
+  console.log("Relatório de pendências enviado: " + enviados + " e-mail(s); " + comPendencia.length + " pessoa(s) com pendências.");
+}
+
+function blocoPessoa_(p, mostrarProgresso) {
+  const PRIORIDADE = { alta: "Alta", media: "Média", baixa: "Baixa" };
+  const STATUS = { aberto: "Aberto", andamento: "Em andamento" };
+  let texto = "";
+  let html = "";
+  if (mostrarProgresso && p.tarefas_total > 0) {
+    const feitas = p.tarefas_total - p.tarefas_pendentes.length;
+    texto += "Tarefas: " + feitas + "/" + p.tarefas_total + " concluídas\n";
+    html += '<p style="margin:0 0 4px;color:#555">Tarefas: ' + feitas + '/' + p.tarefas_total + ' concluídas</p>';
+  }
+  if (p.tarefas_pendentes.length) {
+    texto += "Tarefas pendentes:\n";
+    html += "<p style=\"margin:6px 0 2px\"><strong>Tarefas pendentes</strong></p><ul style=\"margin:0\">";
+    p.tarefas_pendentes.forEach(function (t) {
+      texto += "  [ ] " + t.titulo + "\n";
+      html += "<li>" + esc_(t.titulo) + (t.descricao ? ' <span style="color:#777">— ' + esc_(t.descricao) + "</span>" : "") + "</li>";
+    });
+    html += "</ul>";
+  }
+  if (p.chamados_abertos.length) {
+    texto += "Chamados em aberto:\n";
+    html += "<p style=\"margin:6px 0 2px\"><strong>Chamados em aberto</strong></p><ul style=\"margin:0\">";
+    p.chamados_abertos.forEach(function (c) {
+      const linha = (c.numero || "(sem nº)") + " · " + (c.area || "") + " · " + (PRIORIDADE[c.prioridade] || c.prioridade) +
+        " · " + (STATUS[c.status] || c.status);
+      texto += "  - " + linha + "\n";
+      html += "<li>" + esc_(linha) + (c.atividade ? ' <span style="color:#777">— ' + esc_(c.atividade) + "</span>" : "") + "</li>";
+    });
+    html += "</ul>";
+  }
+  return { texto: texto, html: html };
+}
+
+function primeiroNome_(nome) {
+  return String(nome || "").trim().split(/\s+/)[0] || "";
+}
+
+function esc_(t) {
+  return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

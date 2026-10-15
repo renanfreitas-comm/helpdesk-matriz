@@ -23,7 +23,7 @@ const CLASSES_STATUS = { ativa: "badge-status-andamento", manutencao: "badge-sta
 protegerPagina((user, perfil) => {
   usuarioAtual = user;
   perfilAtual = perfil;
-  montarNav(perfil);
+  montarNav(perfil, user);
   observarMaquinas();
 });
 
@@ -31,6 +31,7 @@ function observarMaquinas() {
   observar("maquinas", (q) => q.order("nome"), (linhas) => {
     listaMaquinas = linhas;
     renderizarTabela();
+    abrirPeloEndereco();
   }, (erro) => {
     tabelaBody.innerHTML = `<tr><td colspan="9" class="vazio">Erro ao carregar máquinas: ${escaparHTML(erro.message)}</td></tr>`;
   });
@@ -328,4 +329,18 @@ function formatarDataHora(timestamp) {
   const d = paraDate(timestamp);
   if (!d) return "";
   return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+// -------------------- Links diretos --------------------
+// maquinas.html#novo abre o cadastro; maquinas.html#m=<id> abre a máquina
+// (usado pela busca da tela inicial).
+let enderecoTratado = false;
+function abrirPeloEndereco() {
+  if (enderecoTratado) return;
+  enderecoTratado = true;
+  const h = window.location.hash;
+  history.replaceState(null, "", window.location.pathname);
+  if (h === "#novo") abrirModal("criar");
+  const m = h.match(/^#m=(.+)$/);
+  if (m && listaMaquinas.some((x) => x.id === decodeURIComponent(m[1]))) abrirModal("editar", decodeURIComponent(m[1]));
 }
