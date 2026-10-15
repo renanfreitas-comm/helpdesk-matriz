@@ -17,12 +17,18 @@
     </div>
 
     <!-- Atalhos de visão (os mais usados pelos técnicos) -->
-    <div class="abas-rapidas" id="abas-chamados">
+    <div class="abas-rapidas abas-com-alterna" id="abas-chamados">
+      <div class="abas-rolagem">
       <button type="button" class="aba-rapida ativa" data-visao="ativos">Em aberto <span class="contador" id="cont-ativos">0</span></button>
       <button type="button" class="aba-rapida" data-visao="meus">Meus <span class="contador" id="cont-meus">0</span></button>
       <button type="button" class="aba-rapida" data-visao="livres">Sem responsável <span class="contador" id="cont-livres">0</span></button>
       <button type="button" class="aba-rapida" data-visao="atrasados">Atrasados <span class="contador contador-alerta" id="cont-atrasados">0</span></button>
       <button type="button" class="aba-rapida" data-visao="todos">Todos</button>
+      </div>
+      <div class="alterna-visao" role="group" aria-label="Forma de ver">
+        <button type="button" data-modo="lista" class="on" title="Ver em lista">☰ Lista</button>
+        <button type="button" data-modo="quadro" title="Ver em quadro (arraste para mudar o status)">▥ Quadro</button>
+      </div>
     </div>
 
     <div class="filtros">
@@ -44,7 +50,10 @@
       </select>
     </div>
 
-    <div class="tabela-wrapper">
+    <p class="dica-deslizar" id="dica-quadro" hidden>Deslize para o lado para ver as outras colunas →  Toque no card para ver detalhes e mudar o status.</p>
+    <div class="quadro-chamados" id="quadro-chamados" hidden></div>
+
+    <div class="tabela-wrapper" id="lista-chamados">
       <div class="tabela-scroll">
       <table class="tabela-chamados">
         <thead>
@@ -142,6 +151,7 @@
 
       <dl class="detalhe-info" id="detalhe-info"></dl>
       <p class="detalhe-atividade" id="detalhe-atividade"></p>
+      <div id="detalhe-sugestao"></div>
 
       <div class="acoes-tabela" id="detalhe-acoes" style="margin:12px 0;"></div>
 
@@ -149,7 +159,7 @@
       <div class="linha-tempo" id="detalhe-eventos"><p class="texto-suave">Carregando...</p></div>
 
       <form class="comentar" id="form-comentario">
-        <textarea id="comentario-texto" rows="2" maxlength="2000" placeholder="Anotar o que foi feito, peça trocada, contato com o usuário..."></textarea>
+        <textarea id="comentario-texto" rows="2" maxlength="2000" placeholder="Anotar o que foi feito, peça trocada, contato com o usuário... Use @nome para avisar alguém."></textarea>
         <button type="submit" class="botao-primario" id="btn-comentar">Anotar</button>
       </form>
     </div>

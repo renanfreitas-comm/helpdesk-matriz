@@ -15,6 +15,7 @@ import { montarNav } from "./nav.js";
 import { observar, inserir, atualizar, excluir, listarUsuarios } from "./db.js";
 import { badgePrazo, ordenarPorPrazo } from "./sla.js";
 import { mudarStatus, assumirChamado } from "./acoes-chamado.js";
+import { AUSENCIAS, TIPOS_AGENDA } from "./agenda-util.js";
 import {
   hojeISO, somarDias, formatarDiaLongo, valeNoDia, descreverRecorrencia,
   marcarTarefa, desmarcarTarefa, horaCurta
@@ -29,6 +30,7 @@ let chamadosAbertos = [];
 let diaEscolhido = hojeISO();
 let visao = "todos";
 let pararConclusoes = null;
+let ausencias = [];   // férias/atestado/folga (Agenda)
 
 const ROTULOS_PRIORIDADE = { baixa: "Baixa", media: "Média", alta: "Alta" };
 const ROTULOS_STATUS = { aberto: "Aberto", andamento: "Em andamento" };
@@ -63,6 +65,8 @@ protegerPagina(async (user, perfil) => {
     chamadosAbertos = linhas.sort(ordenarPorPrazo);
     renderizar();
   }, mostrarErro);
+
+  observar("agenda_eventos", (q) => q.in("tipo", AUSENCIAS), (linhas) => { ausencias = linhas; renderizar(); }, () => {});
 
   observarConclusoes();
   setInterval(() => {
@@ -220,6 +224,8 @@ function cartaoPessoa({ u, minhas, chamados, feitas, total }, conclusaoDe) {
       <header class="cartao-pessoa-topo">
         <div>
           <strong>${escaparHTML(u.nome)}</strong>${eu ? ' <span class="texto-suave">(você)</span>' : ""}
+          ${(() => { const a = ausencias.find((e) => e.usuarioId === u.uid && e.inicio <= diaEscolhido && e.fim >= diaEscolhido);
+            return a ? ` <span class="badge badge-ausente">${TIPOS_AGENDA[a.tipo].emoji} ${TIPOS_AGENDA[a.tipo].rotulo}</span>` : ""; })()}
           <div class="texto-suave cartao-pessoa-resumo">
             ${totalTarefas ? `${feitas}/${totalTarefas} tarefas` : "Sem tarefas no dia"}${chamados.length ? ` · ${chamados.length} chamado(s) em aberto` : ""}
           </div>

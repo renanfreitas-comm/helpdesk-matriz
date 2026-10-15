@@ -5,10 +5,16 @@ import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
 import { observar, listarUsuarios, paraDate } from "./db.js";
 import { situacaoPrazo } from "./sla.js";
+import { desenharIndicadores } from "./indicadores.js";
+import { somarDias } from "./tarefas-util.js";
 
 let usuarios = [];
 let relatorios = [];
-let chamados = [];
+let chamados = [];       // todos (indicadores); a aba de relatórios usa só os resolvidos
+let tarefas = [];
+let conclusoes = [];
+let abaAtual = "indicadores";
+let pararConclusoes = null;
 
 const ROTULOS_STATUS_ATIVIDADE = { concluido: "Concluído", andamento: "Em andamento", pendente: "Pendente" };
 const CLASSES_STATUS_ATIVIDADE = { concluido: "badge-status-resolvido", andamento: "badge-status-andamento", pendente: "badge-status-aberto" };
@@ -18,34 +24,63 @@ protegerPagina(async (user, perfil) => {
 
   usuarios = await listarUsuarios();
   popularSelectTecnicos();
-  definirPeriodoPadrao();
+  aplicarPeriodo("mes");
 
-  observar("relatorios", (q) => q, (linhas) => {
-    relatorios = linhas;
+  observar("relatorios", (q) => q, (linhas) => { relatorios = linhas; renderizarTudo(); });
+  observar("chamados", (q) => q, (linhas) => { chamados = linhas; renderizarTudo(); });
+  observar("tarefas", (q) => q, (linhas) => { tarefas = linhas; renderizarTudo(); });
+  observarConclusoes();
+
+  document.getElementById("filtro-tecnico").addEventListener("change", renderizarTudo);
+  ["filtro-data-inicio", "filtro-data-fim"].forEach((id) => document.getElementById(id).addEventListener("change", () => {
+    document.querySelectorAll("#atalhos-periodo .chip").forEach((c) => c.classList.remove("on"));
+    observarConclusoes();
     renderizarTudo();
-  });
-
-  observar("chamados", (q) => q.eq("status", "resolvido"), (linhas) => {
-    chamados = linhas;
+  }));
+  document.querySelectorAll("#atalhos-periodo .chip").forEach((c) => c.addEventListener("click", () => {
+    aplicarPeriodo(c.dataset.periodo);
+    observarConclusoes();
     renderizarTudo();
-  });
-
-  ["filtro-tecnico", "filtro-data-inicio", "filtro-data-fim"].forEach((id) => {
-    document.getElementById(id).addEventListener("change", renderizarTudo);
-  });
+  }));
+  document.querySelectorAll("#abas-supervisao .aba-rapida").forEach((b) => b.addEventListener("click", () => trocarAba(b.dataset.aba)));
+  document.getElementById("btn-exportar-pdf").addEventListener("click", () => window.print());
+  if (window.location.hash === "#relatorios") trocarAba("relatorios");
 }, { apenasAdmin: true });
+
+function trocarAba(aba) {
+  abaAtual = aba;
+  document.querySelectorAll("#abas-supervisao .aba-rapida").forEach((b) => b.classList.toggle("ativa", b.dataset.aba === aba));
+  document.getElementById("aba-indicadores").hidden = aba !== "indicadores";
+  document.getElementById("aba-relatorios").hidden = aba !== "relatorios";
+  renderizarTudo();
+}
+
+// Conclusões de tarefas: período escolhido + o anterior (para comparar).
+function observarConclusoes() {
+  if (pararConclusoes) pararConclusoes();
+  const ini = document.getElementById("filtro-data-inicio").value;
+  const fim = document.getElementById("filtro-data-fim").value;
+  if (!ini || !fim) return;
+  const tamanho = Math.round((new Date(fim) - new Date(ini)) / 864e5) + 1;
+  pararConclusoes = observar("tarefa_conclusoes", (q) => q.gte("data", somarDias(ini, -tamanho)).lte("data", fim),
+    (linhas) => { conclusoes = linhas; renderizarTudo(); });
+}
+
+function aplicarPeriodo(tipo) {
+  const hoje = new Date();
+  let ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1), fim = hoje;
+  if (tipo === "semana") { ini = new Date(hoje); ini.setDate(hoje.getDate() - ((hoje.getDay() + 6) % 7)); }
+  if (tipo === "mes-passado") { ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1); fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0); }
+  if (tipo === "30") { ini = new Date(hoje); ini.setDate(hoje.getDate() - 29); }
+  document.getElementById("filtro-data-inicio").value = paraISO(ini);
+  document.getElementById("filtro-data-fim").value = paraISO(fim);
+  document.querySelectorAll("#atalhos-periodo .chip").forEach((c) => c.classList.toggle("on", c.dataset.periodo === tipo));
+}
 
 function popularSelectTecnicos() {
   const select = document.getElementById("filtro-tecnico");
   select.innerHTML = '<option value="">Todos os técnicos</option>' +
     usuarios.map((u) => `<option value="${u.uid}">${escaparHTML(u.nome)}</option>`).join("");
-}
-
-function definirPeriodoPadrao() {
-  const hoje = new Date();
-  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-  document.getElementById("filtro-data-inicio").value = paraISO(inicioMes);
-  document.getElementById("filtro-data-fim").value = paraISO(hoje);
 }
 
 function paraISO(data) {
@@ -82,6 +117,20 @@ function renderizarTudo() {
     return true;
   });
 
+  const sel = document.getElementById("filtro-tecnico");
+  document.getElementById("subtitulo-periodo").textContent =
+    `${sel.value ? sel.options[sel.selectedIndex].text : "Todo o time"} · ${formatarData(dataInicio)} a ${formatarData(dataFim)} · comparado com o período anterior de mesmo tamanho.`;
+
+  if (abaAtual === "indicadores") {
+    if (!dataInicio || !dataFim || dataFim < dataInicio) {
+      document.getElementById("indicadores").innerHTML = `<p class="vazio">Escolha um período válido.</p>`;
+      return;
+    }
+    desenharIndicadores(document.getElementById("indicadores"), {
+      chamados, tarefas, conclusoes, usuarios, ini: dataInicio, fim: dataFim, tecnico: tecnicoFiltro
+    });
+    return;
+  }
   renderizarProdutividade(relatoriosFiltrados, chamadosResolvidosFiltrados, tecnicoFiltro);
   renderizarListaRelatorios(relatoriosFiltrados);
 }

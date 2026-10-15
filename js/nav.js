@@ -9,6 +9,7 @@
 import { sair } from "./auth.js";
 import { buscarTodos } from "./db.js";
 import { valeNoDia, hojeISO } from "./tarefas-util.js";
+import { iniciarNotificacoes, atualizarAlertasDePrazo } from "./notificacoes.js";
 
 // Ícones simples (traço), usados no menu e na tela inicial.
 export const ICONES = {
@@ -27,6 +28,9 @@ export const ICONES = {
   senha: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
   sair: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  agenda: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><rect x="7" y="13" width="3" height="3" rx=".5"/>',
+  solucoes: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 8h6M9 11h4"/>',
+  sino: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   tv: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M7 12l3-3 2 2 4-4"/>'
 };
 
@@ -40,10 +44,12 @@ const ITENS = [
   { href: "tarefas.html", rotulo: "Tarefas", icone: "tarefas", contador: "tarefas" },
   { href: "relatorios.html", rotulo: "Relatórios", icone: "relatorios" },
   { href: "visitas.html", rotulo: "Visitas", icone: "visitas" },
+  { href: "agenda.html", rotulo: "Agenda", icone: "agenda" },
+  { href: "solucoes.html", rotulo: "Soluções", icone: "solucoes" },
   { href: "maquinas.html", rotulo: "Máquinas", icone: "maquinas" },
   { href: "estoque.html", rotulo: "Estoque", icone: "estoque" },
   { secao: "Gestão", admin: true },
-  { href: "supervisao.html", rotulo: "Supervisão", icone: "supervisao", admin: true },
+  { href: "supervisao.html", rotulo: "Indicadores", icone: "supervisao", admin: true },
   { href: "usuarios.html", rotulo: "Usuários", icone: "usuarios", admin: true },
   { href: "painel.html", rotulo: "Painel de TV", icone: "tv", admin: true }
 ];
@@ -70,7 +76,10 @@ export function montarNav(perfil, usuario = null) {
   const iniciais = String(perfil.nome || "?").trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
   aside.innerHTML = `
-    <a class="sidebar-logo" href="dashboard.html"><img src="assets/logo-comm-branco.png" alt="Comm" /></a>
+    <div class="sidebar-topo">
+      <a class="sidebar-logo" href="dashboard.html"><img src="assets/logo-comm-branco.png" alt="Comm" /></a>
+      <span class="sino-ancora" id="sino-lateral"></span>
+    </div>
     <nav class="sidebar-nav" aria-label="Módulos">
       ${ITENS.filter((i) => !i.admin || ehAdmin).map((i) => i.secao
         ? `<div class="sidebar-secao">${i.secao}</div>`
@@ -99,6 +108,7 @@ export function montarNav(perfil, usuario = null) {
     topo.innerHTML = `
       <button type="button" class="botao-menu" id="abrir-menu" aria-label="Abrir menu">${icone("menu")}</button>
       <a href="dashboard.html"><img src="assets/logo-comm.png" alt="Comm" /></a>
+      <span class="sino-ancora" id="sino-topo"></span>
       <span class="avatar pequeno">${escaparHTML(iniciais)}</span>`;
     document.body.prepend(topo);
     const fundo = document.createElement("div");
@@ -126,24 +136,32 @@ export function montarNav(perfil, usuario = null) {
     }
   });
 
-  if (usuario && usuario.uid) atualizarContadores(usuario.uid);
+  if (usuario && usuario.uid) {
+    iniciarNotificacoes(usuario.uid, [document.getElementById("sino-lateral"), document.getElementById("sino-topo")]);
+    atualizarContadores(usuario.uid);
+    // Prazos mudam com o tempo: recalcula os alertas a cada minuto.
+    setInterval(() => atualizarAlertasDePrazo(meusAbertos), 60000);
+  }
 }
 
 // -------------------- Contadores do menu --------------------
 // Chamados: quantos em aberto estão com você. Tarefas: quantas suas faltam hoje.
 let uidContadores = null;
+let meusAbertos = [];
 async function atualizarContadores(uid) {
   uidContadores = uid;
   try {
     const hoje = hojeISO();
     const [chamados, tarefas, conclusoes] = await Promise.all([
-      buscarTodos("chamados", (q) => q.eq("responsavel_uid", uid).neq("status", "resolvido"), "id"),
+      buscarTodos("chamados", (q) => q.eq("responsavel_uid", uid).neq("status", "resolvido"), "id,numero,area,atividade,prioridade,status,criado_em"),
       buscarTodos("tarefas", (q) => q.eq("responsavel_uid", uid)),
       buscarTodos("tarefa_conclusoes", (q) => q.eq("data", hoje), "tarefa_id")
     ]);
     const feitas = new Set(conclusoes.map((c) => c.tarefaId));
     const pendentes = tarefas.filter((t) => valeNoDia(t, hoje) && !feitas.has(t.id)).length;
     mostrarContador("chamados", chamados.length);
+    meusAbertos = chamados;
+    atualizarAlertasDePrazo(chamados);
     mostrarContador("tarefas", pendentes);
   } catch (err) {
     // Contador é só um atalho visual: se falhar, o menu continua funcionando.

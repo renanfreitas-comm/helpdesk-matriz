@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soluções — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="com-menu">
+
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <div>
+        <h1>Base de soluções</h1>
+        <p class="texto-suave subtitulo-pagina">O que o time já resolveu, escrito por quem resolveu. Dá para salvar na hora de fechar o chamado.</p>
+      </div>
+      <button class="botao-primario" id="btn-nova-solucao">+ Nova solução</button>
+    </div>
+
+    <div class="filtros filtros-solucoes">
+      <input type="search" id="busca-solucoes" placeholder="Buscar: impressora não imprime, VPN, senha..." autocomplete="off" />
+    </div>
+    <div class="seletor-chips" id="categorias-solucoes" style="margin-bottom:14px"></div>
+
+    <div class="sol-grade">
+      <div id="lista-solucoes" class="lista-sol"><p class="vazio">Carregando...</p></div>
+      <aside class="sol-lado">
+        <div class="card">
+          <h3 class="titulo-card">Mais usadas</h3>
+          <ul class="ranking" id="ranking-usadas"></ul>
+        </div>
+        <div class="card">
+          <h3 class="titulo-card">Quem mais contribuiu</h3>
+          <ul class="ranking" id="ranking-autores"></ul>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- Modal: ver / criar / editar solução -->
+  <div class="modal-fundo" id="modal-solucao">
+    <div class="modal modal-largo">
+      <h2 id="solucao-modal-titulo">Nova solução</h2>
+      <form class="modal-form" id="form-solucao">
+        <input type="hidden" id="solucao-id" />
+        <div class="campo">
+          <label for="solucao-titulo">Título</label>
+          <input type="text" id="solucao-titulo" required minlength="3" maxlength="200" placeholder="Ex.: Impressora: fila travada após atualização do Windows" />
+        </div>
+        <div class="campo">
+          <label>Categoria</label>
+          <div class="seletor-chips" id="solucao-categorias"></div>
+        </div>
+        <div class="campo">
+          <label for="solucao-problema">Problema / sintomas <span class="texto-suave">(ajuda a achar depois)</span></label>
+          <textarea id="solucao-problema" rows="2" maxlength="2000" placeholder="Ex.: documentos ficam presos na fila, impressora não responde"></textarea>
+        </div>
+        <div class="campo">
+          <label for="solucao-passos">Como resolver <span class="texto-suave">(um passo por linha)</span></label>
+          <textarea id="solucao-passos" rows="6" required minlength="3" maxlength="5000"></textarea>
+        </div>
+        <label class="alternar apenas-admin" style="display:none"><input type="checkbox" id="solucao-revisar"> Marcar como "Precisa revisar" (não é sugerida nos chamados)</label>
+        <p class="erro-msg" id="solucao-erro"></p>
+        <div class="modal-acoes">
+          <button type="button" class="botao-perigo" id="btn-excluir-solucao" style="margin-right:auto" hidden>Excluir</button>
+          <button type="button" class="botao-secundario" id="btn-cancelar-solucao">Cancelar</button>
+          <button type="submit" class="botao-primario" id="btn-salvar-solucao">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/solucoes.js"></script>
+</body>
+</html>

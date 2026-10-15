@@ -691,38 +691,6 @@ returns boolean language sql stable security definer set search_path = public as
                       where t.id = p_tarefa and t.responsavel_uid = auth.uid()));
 $$;
 
--- Relatório de pendências do dia, por pessoa (tarefas não concluídas +
--- chamados em aberto). Usado só pelo Apps Script com a chave de serviço.
-create or replace function public.relatorio_pendencias(p_data date default null)
-returns jsonb language sql stable security definer set search_path = public as $$
-  with dia as (select coalesce(p_data, public.hoje_sp()) as d)
-  select coalesce(jsonb_agg(p order by p->>'nome'), '[]'::jsonb)
-  from (
-    select jsonb_build_object(
-      'uid', u.id, 'nome', u.nome, 'email', u.email, 'papel', u.papel,
-      'data', (select d from dia),
-      'tarefas_total', (select count(*) from public.tarefas t, dia
-                        where t.responsavel_uid = u.id and public.tarefa_vale_no_dia(t, dia.d)),
-      'tarefas_pendentes', coalesce((
-        select jsonb_agg(jsonb_build_object('titulo', t.titulo, 'descricao', t.descricao) order by t.ordem, t.titulo)
-        from public.tarefas t, dia
-        where t.responsavel_uid = u.id and public.tarefa_vale_no_dia(t, dia.d)
-          and not exists (select 1 from public.tarefa_conclusoes c where c.tarefa_id = t.id and c.data = dia.d)
-      ), '[]'::jsonb),
-      'chamados_abertos', coalesce((
-        select jsonb_agg(jsonb_build_object('numero', c.numero, 'area', c.area, 'status', c.status,
-                                            'prioridade', c.prioridade, 'atividade', left(c.atividade, 150),
-                                            'criado_em', c.criado_em) order by c.criado_em)
-        from public.chamados c
-        where c.responsavel_uid = u.id and c.status <> 'resolvido'
-      ), '[]'::jsonb)
-    ) as p
-    from public.usuarios u
-    where u.papel <> 'painel'
-  ) s;
-$$;
-revoke execute on function public.relatorio_pendencias(date) from public, anon, authenticated;
-grant execute on function public.relatorio_pendencias(date) to service_role;
 
 -- ===================================================== REGRAS DE ACESSO (RLS)
 alter table public.usuarios          enable row level security;
@@ -881,13 +849,320 @@ create policy laudos_atualizar on storage.objects for update to authenticated
 create policy laudos_excluir on storage.objects for delete to authenticated
   using (bucket_id = 'laudos' and public.pode_editar_visita((storage.foldername(name))[1]));
 
+-- ==================================================================
+-- OUTUBRO/2026: BASE DE SOLUÇÕES, AGENDA DA EQUIPE E NOTIFICAÇÕES
+-- ==================================================================
+
+-- ----------------------------------------------------- BASE DE SOLUÇÕES
+-- "Como resolvi": salvo pelo técnico ao fechar um chamado (ou à mão).
+create table if not exists public.solucoes (
+  id              text primary key default gen_random_uuid()::text,
+  titulo          text not null check (char_length(titulo) between 3 and 200),
+  categoria       text not null default 'outro'
+                  check (categoria in ('impressora', 'computador', 'rede', 'acesso', 'telefonia', 'sistemas', 'outro')),
+  problema        text not null default '' check (char_length(problema) <= 2000),
+  passos          text not null check (char_length(passos) between 3 and 5000),
+  chamado_id      text references public.chamados (id) on delete set null,
+  usos            integer not null default 0 check (usos >= 0),
+  ultimo_uso      timestamptz,
+  revisar         boolean not null default false,
+  criado_por_uid  uuid,
+  criado_por_nome text,
+  criado_em       timestamptz not null default now(),
+  atualizado_em   timestamptz not null default now()
+);
+create index if not exists solucoes_categoria_idx on public.solucoes (categoria);
+
+drop trigger if exists solucoes_autoria on public.solucoes;
+create trigger solucoes_autoria before insert or update on public.solucoes
+  for each row execute function public.tg_autoria();
+
+-- Contador "resolveu N chamados": só sobe por esta função (1 por chamado).
+create table if not exists public.solucao_usos (
+  solucao_id text not null references public.solucoes (id) on delete cascade,
+  chamado_id text not null references public.chamados (id) on delete cascade,
+  usado_por  uuid,
+  usado_em   timestamptz not null default now(),
+  primary key (solucao_id, chamado_id)
+);
+
+alter table public.solucoes enable row level security;
+alter table public.solucao_usos enable row level security;
+drop policy if exists solucoes_ler on public.solucoes;
+drop policy if exists solucoes_criar on public.solucoes;
+drop policy if exists solucoes_editar on public.solucoes;
+drop policy if exists solucoes_excluir on public.solucoes;
+drop policy if exists solucao_usos_ler on public.solucao_usos;
+create policy solucoes_ler on public.solucoes for select to authenticated
+  using ((select public.eh_membro()));
+create policy solucoes_criar on public.solucoes for insert to authenticated
+  with check ((select public.eh_membro()) and usos = 0);
+create policy solucoes_editar on public.solucoes for update to authenticated
+  using ((select public.eh_membro()) and (criado_por_uid = auth.uid() or (select public.eh_admin())))
+  with check ((select public.eh_membro()));
+create policy solucoes_excluir on public.solucoes for delete to authenticated
+  using ((select public.eh_admin()) or ((select public.eh_membro()) and criado_por_uid = auth.uid()));
+create policy solucao_usos_ler on public.solucao_usos for select to authenticated
+  using ((select public.eh_membro()));
+
+-- Ninguém muda o contador de usos editando a linha (só a função acima).
+create or replace function public.tg_solucoes_usos()
+returns trigger language plpgsql as $$
+begin
+  if auth.uid() is not null and tg_op = 'UPDATE' and current_setting('hd.usando_solucao', true) is distinct from '1' then
+    new.usos := old.usos;
+    new.ultimo_uso := old.ultimo_uso;
+  end if;
+  return new;
+end $$;
+drop trigger if exists solucoes_usos on public.solucoes;
+create trigger solucoes_usos before update on public.solucoes
+  for each row execute function public.tg_solucoes_usos();
+
+create or replace function public.usar_solucao(p_solucao text, p_chamado text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if not public.eh_membro() then
+    raise exception 'Sem permissão.' using errcode = '42501';
+  end if;
+  if not exists (select 1 from solucoes where id = p_solucao) then
+    raise exception 'Solução não encontrada.';
+  end if;
+  insert into solucao_usos (solucao_id, chamado_id, usado_por)
+  values (p_solucao, p_chamado, auth.uid())
+  on conflict do nothing;
+  if found then
+    perform set_config('hd.usando_solucao', '1', true);
+    update solucoes set usos = usos + 1, ultimo_uso = now() where id = p_solucao;
+    perform set_config('hd.usando_solucao', '0', true);
+  end if;
+  select usos into n from solucoes where id = p_solucao;
+  return n;
+end $$;
+revoke execute on function public.usar_solucao(text, text) from public, anon;
+grant execute on function public.usar_solucao(text, text) to authenticated;
+
+-- ----------------------------------------------------- AGENDA DA EQUIPE
+-- Férias, atestados, folgas, plantões e treinamentos. Visitas e tarefas
+-- aparecem na agenda direto dos módulos delas.
+create table if not exists public.agenda_eventos (
+  id              text primary key default gen_random_uuid()::text,
+  usuario_id      uuid not null references public.usuarios (id) on delete cascade,
+  usuario_nome    text,
+  tipo            text not null check (tipo in ('ferias', 'atestado', 'folga', 'plantao', 'treinamento', 'outro')),
+  inicio          date not null,
+  fim             date not null,
+  observacao      text not null default '' check (char_length(observacao) <= 300),
+  criado_por_uid  uuid,
+  criado_por_nome text,
+  criado_em       timestamptz not null default now(),
+  atualizado_em   timestamptz not null default now(),
+  check (fim >= inicio and fim - inicio <= 366)
+);
+create index if not exists agenda_eventos_periodo_idx on public.agenda_eventos (inicio, fim);
+
+drop trigger if exists agenda_autoria on public.agenda_eventos;
+create trigger agenda_autoria before insert or update on public.agenda_eventos
+  for each row execute function public.tg_autoria();
+
+create or replace function public.tg_agenda_nome()
+returns trigger language plpgsql as $$
+begin
+  if public.conta_eh_painel(new.usuario_id) then
+    raise exception 'A conta de painel (TV) não entra na agenda.' using errcode = '42501';
+  end if;
+  new.usuario_nome := public.nome_usuario(new.usuario_id);
+  return new;
+end $$;
+drop trigger if exists agenda_nome on public.agenda_eventos;
+create trigger agenda_nome before insert or update on public.agenda_eventos
+  for each row execute function public.tg_agenda_nome();
+
+-- Tipos que tiram a pessoa do atendimento (não recebe chamado, some do painel).
+create or replace function public.ausente_no_dia(p_uid uuid, p_dia date default null)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from agenda_eventos
+                  where usuario_id = p_uid and tipo in ('ferias', 'atestado', 'folga')
+                    and coalesce(p_dia, hoje_sp()) between inicio and fim);
+$$;
+
+alter table public.agenda_eventos enable row level security;
+drop policy if exists agenda_ler on public.agenda_eventos;
+drop policy if exists agenda_criar on public.agenda_eventos;
+drop policy if exists agenda_editar on public.agenda_eventos;
+drop policy if exists agenda_excluir on public.agenda_eventos;
+-- Todos veem; cada um lança o próprio; admin lança de qualquer pessoa.
+create policy agenda_ler on public.agenda_eventos for select to authenticated
+  using ((select public.eh_membro()) or (select public.eh_painel()));
+create policy agenda_criar on public.agenda_eventos for insert to authenticated
+  with check ((select public.eh_admin()) or ((select public.eh_membro()) and usuario_id = auth.uid()));
+create policy agenda_editar on public.agenda_eventos for update to authenticated
+  using ((select public.eh_admin()) or ((select public.eh_membro()) and usuario_id = auth.uid()))
+  with check ((select public.eh_admin()) or ((select public.eh_membro()) and usuario_id = auth.uid()));
+create policy agenda_excluir on public.agenda_eventos for delete to authenticated
+  using ((select public.eh_admin()) or ((select public.eh_membro()) and usuario_id = auth.uid()));
+
+-- Relatório de pendências do dia, por pessoa (tarefas não concluídas +
+-- chamados em aberto). Usado só pelo Apps Script com a chave de serviço.
+-- Quem está ausente no dia (férias, atestado, folga) fica de fora.
+create or replace function public.relatorio_pendencias(p_data date default null)
+returns jsonb language sql stable security definer set search_path = public as $$
+  with dia as (select coalesce(p_data, public.hoje_sp()) as d)
+  select coalesce(jsonb_agg(p order by p->>'nome'), '[]'::jsonb)
+  from (
+    select jsonb_build_object(
+      'uid', u.id, 'nome', u.nome, 'email', u.email, 'papel', u.papel,
+      'data', (select d from dia),
+      'tarefas_total', (select count(*) from public.tarefas t, dia
+                        where t.responsavel_uid = u.id and public.tarefa_vale_no_dia(t, dia.d)),
+      'tarefas_pendentes', coalesce((
+        select jsonb_agg(jsonb_build_object('titulo', t.titulo, 'descricao', t.descricao) order by t.ordem, t.titulo)
+        from public.tarefas t, dia
+        where t.responsavel_uid = u.id and public.tarefa_vale_no_dia(t, dia.d)
+          and not exists (select 1 from public.tarefa_conclusoes c where c.tarefa_id = t.id and c.data = dia.d)
+      ), '[]'::jsonb),
+      'chamados_abertos', coalesce((
+        select jsonb_agg(jsonb_build_object('numero', c.numero, 'area', c.area, 'status', c.status,
+                                            'prioridade', c.prioridade, 'atividade', left(c.atividade, 150),
+                                            'criado_em', c.criado_em) order by c.criado_em)
+        from public.chamados c
+        where c.responsavel_uid = u.id and c.status <> 'resolvido'
+      ), '[]'::jsonb)
+    ) as p
+    from public.usuarios u, dia
+    where u.papel <> 'painel' and not public.ausente_no_dia(u.id, dia.d)
+  ) s;
+$$;
+revoke execute on function public.relatorio_pendencias(date) from public, anon, authenticated;
+grant execute on function public.relatorio_pendencias(date) to service_role;
+
+-- ----------------------------------------------------- NOTIFICAÇÕES
+create table if not exists public.notificacoes (
+  id          bigint generated always as identity primary key,
+  usuario_id  uuid not null references public.usuarios (id) on delete cascade,
+  tipo        text not null check (tipo in ('atribuicao', 'mencao', 'comentario', 'resolvido', 'tarefa', 'novo_chamado')),
+  titulo      text not null check (char_length(titulo) <= 200),
+  texto       text not null default '' check (char_length(texto) <= 300),
+  link        text not null default '' check (char_length(link) <= 300),
+  autor_nome  text,
+  lida        boolean not null default false,
+  criado_em   timestamptz not null default now()
+);
+create index if not exists notificacoes_usuario_idx on public.notificacoes (usuario_id, criado_em desc);
+
+alter table public.notificacoes enable row level security;
+drop policy if exists notificacoes_ler on public.notificacoes;
+drop policy if exists notificacoes_marcar on public.notificacoes;
+drop policy if exists notificacoes_apagar on public.notificacoes;
+-- Cada um só vê, marca como lida e apaga as próprias. Quem cria são os gatilhos.
+create policy notificacoes_ler on public.notificacoes for select to authenticated
+  using (usuario_id = auth.uid() and (select public.eh_membro()));
+create policy notificacoes_marcar on public.notificacoes for update to authenticated
+  using (usuario_id = auth.uid() and (select public.eh_membro())) with check (usuario_id = auth.uid());
+create policy notificacoes_apagar on public.notificacoes for delete to authenticated
+  using (usuario_id = auth.uid() and (select public.eh_membro()));
+revoke insert on public.notificacoes from authenticated;
+revoke update on public.notificacoes from authenticated;
+grant update (lida) on public.notificacoes to authenticated;
+
+create or replace function public.notificar(p_para uuid, p_tipo text, p_titulo text, p_texto text, p_link text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_para is null or p_para is not distinct from auth.uid() then return; end if;
+  if public.conta_eh_painel(p_para) then return; end if;
+  insert into notificacoes (usuario_id, tipo, titulo, texto, link, autor_nome)
+  values (p_para, p_tipo, left(p_titulo, 200), left(coalesce(p_texto, ''), 300), left(coalesce(p_link, ''), 300), public.meu_nome());
+  -- Guarda só as 200 mais recentes de cada pessoa.
+  delete from notificacoes where usuario_id = p_para and id in (
+    select id from notificacoes where usuario_id = p_para order by criado_em desc offset 200);
+end $$;
+revoke execute on function public.notificar(uuid, text, text, text, text) from public, anon, authenticated;
+
+create or replace function public.tg_notificar_chamados()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  rotulo text := coalesce(nullif(new.numero, ''), 'sem número');
+  resumo text := new.area || ' · ' || left(new.atividade, 120);
+  link   text := 'chamados.html#c=' || new.id;
+  u record;
+begin
+  if auth.uid() is null then return null; end if;
+  if tg_op = 'INSERT' then
+    if new.responsavel_uid is null then
+      for u in select id from usuarios where papel <> 'painel' and id <> auth.uid() and not ausente_no_dia(id) loop
+        perform notificar(u.id, 'novo_chamado', 'Novo chamado sem responsável: ' || rotulo, resumo, link);
+      end loop;
+    else
+      perform notificar(new.responsavel_uid, 'atribuicao', meu_nome() || ' passou para você o chamado ' || rotulo, resumo, link);
+    end if;
+    return null;
+  end if;
+  if new.responsavel_uid is distinct from old.responsavel_uid and new.responsavel_uid is not null then
+    perform notificar(new.responsavel_uid, 'atribuicao', meu_nome() || ' passou para você o chamado ' || rotulo, resumo, link);
+  end if;
+  if new.status = 'resolvido' and old.status <> 'resolvido' then
+    perform notificar(new.criado_por_uid, 'resolvido',
+      coalesce(new.responsavel_nome, meu_nome()) || ' resolveu o chamado ' || rotulo, resumo, link);
+  end if;
+  return null;
+end $$;
+drop trigger if exists chamados_notificar on public.chamados;
+create trigger chamados_notificar after insert or update on public.chamados
+  for each row execute function public.tg_notificar_chamados();
+
+-- Comentário: avisa quem foi citado com @nome e o responsável pelo chamado.
+create or replace function public.tg_notificar_comentario()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  c chamados;
+  u record;
+  avisados uuid[] := '{}';
+  texto_min text := lower(new.texto);
+begin
+  if auth.uid() is null or new.tipo <> 'comentario' then return null; end if;
+  select * into c from chamados where id = new.chamado_id;
+  if not found then return null; end if;
+  for u in select id, nome from usuarios where papel <> 'painel' and id <> auth.uid() loop
+    if position('@' || lower(split_part(u.nome, ' ', 1)) in texto_min) > 0
+       or position('@' || lower(replace(u.nome, ' ', '')) in texto_min) > 0 then
+      perform notificar(u.id, 'mencao', meu_nome() || ' mencionou você no chamado ' || coalesce(nullif(c.numero, ''), ''),
+                        left(new.texto, 200), 'chamados.html#c=' || c.id);
+      avisados := avisados || u.id;
+    end if;
+  end loop;
+  if c.responsavel_uid is not null and not (c.responsavel_uid = any (avisados)) then
+    perform notificar(c.responsavel_uid, 'comentario', meu_nome() || ' comentou no seu chamado ' || coalesce(nullif(c.numero, ''), ''),
+                      left(new.texto, 200), 'chamados.html#c=' || c.id);
+  end if;
+  return null;
+end $$;
+drop trigger if exists chamado_eventos_notificar on public.chamado_eventos;
+create trigger chamado_eventos_notificar after insert on public.chamado_eventos
+  for each row execute function public.tg_notificar_comentario();
+
+create or replace function public.tg_notificar_tarefas()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or new.responsavel_uid is null or not new.ativa then return null; end if;
+  if tg_op = 'INSERT' or new.responsavel_uid is distinct from old.responsavel_uid then
+    perform notificar(new.responsavel_uid, 'tarefa', 'Nova tarefa para você: ' || new.titulo,
+                      left(coalesce(new.descricao, ''), 200), 'tarefas.html#minhas');
+  end if;
+  return null;
+end $$;
+drop trigger if exists tarefas_notificar on public.tarefas;
+create trigger tarefas_notificar after insert or update on public.tarefas
+  for each row execute function public.tg_notificar_tarefas();
+
 -- ====================================================== REALTIME (telas ao vivo)
 do $$
 declare t text;
 begin
   foreach t in array array['usuarios', 'sessoes_ativas', 'chamados', 'chamado_eventos', 'tarefas', 'tarefa_conclusoes',
                            'relatorios', 'maquinas',
-                           'maquina_historico', 'itens_estoque', 'visitas'] loop
+                           'maquina_historico', 'itens_estoque', 'visitas',
+                           'solucoes', 'agenda_eventos', 'notificacoes'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

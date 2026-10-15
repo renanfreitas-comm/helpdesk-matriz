@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agenda — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="com-menu">
+
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <div>
+        <h1>Agenda da equipe</h1>
+        <p class="texto-suave subtitulo-pagina">Quem está onde na semana. Visitas e tarefas entram sozinhas, puxadas dos módulos delas.</p>
+      </div>
+      <div class="atalhos">
+        <button type="button" class="botao-secundario" id="semana-anterior" title="Semana anterior">‹</button>
+        <button type="button" class="botao-secundario" id="semana-hoje">Hoje</button>
+        <button type="button" class="botao-secundario" id="semana-seguinte" title="Próxima semana">›</button>
+        <button type="button" class="botao-primario" id="btn-novo-evento">+ Lançar ausência / plantão</button>
+      </div>
+    </div>
+
+    <div class="resumo-hoje" id="resumo-hoje"></div>
+
+    <div class="agenda-cabecalho">
+      <strong id="titulo-semana">—</strong>
+      <label class="alternar"><input type="checkbox" id="mostrar-fds" /> Mostrar sábado e domingo</label>
+    </div>
+    <p class="dica-deslizar">Deslize a agenda para o lado para ver os outros dias →</p>
+    <div class="grade-agenda-scroll">
+      <div class="grade-agenda" id="grade-agenda"><p class="vazio">Carregando...</p></div>
+    </div>
+    <div class="legenda-agenda">
+      <span style="--c:#dbeafe">Visita técnica</span>
+      <span style="--c:#ede9fe">Plantão</span>
+      <span style="--c:#fee2e2">Férias / atestado</span>
+      <span style="--c:#e2e8f0">Folga</span>
+      <span style="--c:#dcfce7">Treinamento</span>
+      <span style="--c:#FFF4D9">Tarefas do dia</span>
+      <span class="texto-suave dica-agenda">Clique num dia vazio para lançar. Férias, atestado e folga tiram a pessoa dos chamados novos, do Painel de TV e do relatório das 18h.</span>
+    </div>
+  </main>
+
+  <!-- Modal: lançar / editar -->
+  <div class="modal-fundo" id="modal-evento">
+    <div class="modal">
+      <h2 id="evento-modal-titulo">Lançar ausência / plantão</h2>
+      <form class="modal-form" id="form-evento">
+        <input type="hidden" id="evento-id" />
+        <div class="campo">
+          <label for="evento-pessoa">Pessoa</label>
+          <select id="evento-pessoa" required></select>
+        </div>
+        <div class="campo">
+          <label>Tipo</label>
+          <div class="seletor-chips" id="evento-tipos"></div>
+        </div>
+        <div class="linha-dupla">
+          <div class="campo"><label for="evento-inicio">De</label><input type="date" id="evento-inicio" required /></div>
+          <div class="campo"><label for="evento-fim">Até</label><input type="date" id="evento-fim" required /></div>
+        </div>
+        <div class="campo">
+          <label for="evento-obs">Observação <span class="texto-suave">(opcional)</span></label>
+          <input type="text" id="evento-obs" maxlength="300" placeholder="Ex.: 8h às 18h · volta na segunda" />
+        </div>
+        <p class="texto-suave" id="evento-aviso" style="font-size:12.5px;margin:0"></p>
+        <p class="erro-msg" id="evento-erro"></p>
+        <div class="modal-acoes">
+          <button type="button" class="botao-perigo" id="btn-excluir-evento" style="margin-right:auto" hidden>Excluir</button>
+          <button type="button" class="botao-secundario" id="btn-cancelar-evento">Cancelar</button>
+          <button type="submit" class="botao-primario" id="btn-salvar-evento">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/agenda.js"></script>
+</body>
+</html>

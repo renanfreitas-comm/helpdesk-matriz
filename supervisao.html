@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Supervisão — Help Desk Matriz</title>
+  <title>Indicadores — Help Desk Matriz</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body class="com-menu">
@@ -11,15 +11,31 @@
   <aside id="sidebar" class="sidebar"></aside>
 
   <main class="app-main">
-    <h1>Supervisão do time</h1>
-    <p class="texto-suave" style="margin-top:-14px;margin-bottom:20px;">
-      Acompanhe os relatórios diários e a produtividade de cada técnico.
-    </p>
+    <div class="topo-pagina">
+      <div>
+        <h1>Indicadores</h1>
+        <p class="texto-suave subtitulo-pagina" id="subtitulo-periodo">Desempenho do time no período escolhido, comparado com o período anterior.</p>
+      </div>
+      <div class="atalhos nao-imprimir">
+        <button type="button" class="botao-secundario" id="btn-exportar-pdf" title="Abre a impressão; escolha &quot;Salvar como PDF&quot;">⬇ Exportar PDF</button>
+      </div>
+    </div>
 
-    <div class="filtros">
+    <div class="abas-rapidas nao-imprimir" id="abas-supervisao">
+      <button type="button" class="aba-rapida ativa" data-aba="indicadores">Indicadores</button>
+      <button type="button" class="aba-rapida" data-aba="relatorios">Relatórios do time</button>
+    </div>
+
+    <div class="filtros filtros-periodo nao-imprimir">
       <select id="filtro-tecnico">
         <option value="">Todos os técnicos</option>
       </select>
+      <div class="seletor-chips" id="atalhos-periodo">
+        <button type="button" class="chip" data-periodo="semana">Esta semana</button>
+        <button type="button" class="chip on" data-periodo="mes">Este mês</button>
+        <button type="button" class="chip" data-periodo="mes-passado">Mês passado</button>
+        <button type="button" class="chip" data-periodo="30">Últimos 30 dias</button>
+      </div>
       <div class="campo" style="margin:0;">
         <label style="margin-bottom:2px;">De</label>
         <input type="date" id="filtro-data-inicio" />
@@ -30,6 +46,11 @@
       </div>
     </div>
 
+    <section id="aba-indicadores">
+      <div id="indicadores"><p class="carregando">Calculando...</p></div>
+    </section>
+
+    <section id="aba-relatorios" hidden>
     <div class="painel">
       <h2>Produtividade no período</h2>
       <div class="tabela-wrapper" style="box-shadow:none;">
@@ -55,6 +76,7 @@
         <p class="carregando">Carregando relatórios...</p>
       </div>
     </div>
+    </section>
   </main>
 
   <script type="module" src="js/supervisao.js"></script>

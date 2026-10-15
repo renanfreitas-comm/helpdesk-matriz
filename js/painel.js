@@ -13,6 +13,7 @@ import { protegerPagina, sair } from "./auth.js";
 import { observar } from "./db.js";
 import { situacaoPrazo, ordenarPorPrazo } from "./sla.js";
 import { hojeISO, formatarDiaLongo, valeNoDia, horaCurta } from "./tarefas-util.js";
+import { AUSENCIAS } from "./agenda-util.js";
 
 const ROTULOS_PRIORIDADE = { baixa: "Baixa", media: "Média", alta: "Alta" };
 const ROTULOS_STATUS = { aberto: "Aberto", andamento: "Em andamento" };
@@ -25,6 +26,7 @@ let chamadosAbertos = [];
 let resolvidosHoje = [];
 let carregou = { usuarios: false, tarefas: false, conclusoes: false, chamados: false };
 let pararDoDia = [];
+let ausentes = new Set();   // férias/atestado/folga hoje (Agenda): somem do painel
 
 const el = (id) => document.getElementById(id);
 
@@ -61,6 +63,11 @@ function observarDoDia() {
       conclusoes = linhas;
       pronto("conclusoes");
     }, mostrarErro, { filtroRealtime: `data=eq.${dia}` }),
+    observar("agenda_eventos", (q) => q.in("tipo", AUSENCIAS).lte("inicio", dia).gte("fim", dia), (linhas) => {
+      if (dia !== hoje) return;
+      ausentes = new Set(linhas.map((e) => e.usuarioId));
+      renderizar();
+    }, () => {}),
     observar("chamados", (q) => q.eq("status", "resolvido").gte("resolvido_em", inicioDoDia), (linhas) => {
       if (dia !== hoje) return;
       resolvidosHoje = linhas;
@@ -99,7 +106,7 @@ function renderizar() {
       concluidas: minhas.filter((t) => feitas.has(String(t.id))),
       total: minhas.length
     };
-  }).filter((p) => p.total > 0);
+  }).filter((p) => p.total > 0 && !ausentes.has(p.u.id));
 
   // Topo: números gerais
   const total = pessoas.reduce((s, p) => s + p.total, 0);

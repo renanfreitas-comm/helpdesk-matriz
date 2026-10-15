@@ -13,6 +13,7 @@ import { observar, listarUsuarios, buscarTodos } from "./db.js";
 import { badgePrazo, situacaoPrazo, ordenarPorPrazo, tempoMedioResolucao } from "./sla.js";
 import { botoesRapidos, ligarBotoesRapidos, mudarStatus } from "./acoes-chamado.js";
 import { hojeISO, valeNoDia, marcarTarefa, desmarcarTarefa, horaCurta, somarDias } from "./tarefas-util.js";
+import { AUSENCIAS } from "./agenda-util.js";
 
 const ROTULOS_PRIORIDADE = { baixa: "Baixa", media: "Média", alta: "Alta" };
 const ROTULOS_STATUS = { aberto: "Aberto", andamento: "Em andamento", resolvido: "Resolvido" };
@@ -23,7 +24,8 @@ let perfilAtual = null;
 let usuarios = [];
 // Dados que alimentam a tela (cada um atualiza sozinho).
 const dados = {
-  chamados: [], tarefas: [], conclusoes: [], maquinas: [], estoque: [], visitas: [], meuRelatorioHoje: null
+  chamados: [], tarefas: [], conclusoes: [], maquinas: [], estoque: [], visitas: [], meuRelatorioHoje: null,
+  agenda: [], solucoes: []
 };
 
 const ehAdmin = () => perfilAtual && perfilAtual.papel === "admin";
@@ -57,6 +59,11 @@ protegerPagina(async (user, perfil) => {
     dados.meuRelatorioHoje = linhas[0] || null;
     desenharModulos();
   });
+
+  // Agenda (quem está fora/de plantão hoje) e Base de soluções: se o banco
+  // ainda não tiver essas tabelas, os cards só ficam zerados.
+  observar("agenda_eventos", (q) => q.lte("inicio", hoje).gte("fim", hoje), (linhas) => { dados.agenda = linhas; desenharModulos(); }, () => {});
+  observar("solucoes", (q) => q, (linhas) => { dados.solucoes = linhas; desenharModulos(); }, () => {});
 
   // Prazos ("vence em...") mudam com o tempo.
   setInterval(atualizarTudo, 60000);
@@ -141,6 +148,12 @@ function desenharModulos() {
     ? Math.round(100 * resolvidos30.filter((c) => situacaoPrazo(c).estado === "cumprido").length / resolvidos30.length) + "%"
     : "—";
 
+  const fora = dados.agenda.filter((e) => AUSENCIAS.includes(e.tipo));
+  const plantao = dados.agenda.filter((e) => e.tipo === "plantao");
+  const nomes = (l) => [...new Set(l.map((e) => String(e.usuarioNome || "").split(" ")[0]))].filter(Boolean).join(", ");
+  const semanaAtras = Date.now() - 7 * 864e5;
+  const solucoesNovas = dados.solucoes.filter((x) => new Date(x.criadoEm) >= semanaAtras).length;
+
   const grupos = [
     { titulo: "Atendimento", itens: [
       { href: "chamados.html", icone: "chamados", cor: "vermelho", nome: "Chamados",
@@ -151,7 +164,10 @@ function desenharModulos() {
         rodape: tarefasTime.length ? `Time: ${tarefasTime.filter((t) => feitasTime.has(t.id)).length} de ${tarefasTime.length} feitas` : "Sem tarefas hoje" },
       { href: "visitas.html", icone: "visitas", cor: "azul", nome: "Visitas técnicas",
         info: [[visitasSemana, "próximos 7 dias"]],
-        rodape: visitasHoje ? `${visitasHoje} hoje` : "Nenhuma hoje" }
+        rodape: visitasHoje ? `${visitasHoje} hoje` : "Nenhuma hoje" },
+      { href: "agenda.html", icone: "agenda", cor: "verde", nome: "Agenda da equipe",
+        info: [[fora.length, fora.length === 1 ? "fora hoje" : "fora hoje", fora.length ? "aviso" : ""]],
+        rodape: [fora.length ? nomes(fora) + " fora" : "Todo o time disponível", plantao.length ? "plantão: " + nomes(plantao) : ""].filter(Boolean).join(" · ") }
     ]},
     { titulo: "Inventário", itens: [
       { href: "maquinas.html", icone: "maquinas", cor: "roxo", nome: "Máquinas",
@@ -162,11 +178,14 @@ function desenharModulos() {
         rodape: `${aguardandoPeca} aguardando peça` }
     ]},
     { titulo: "Registros e gestão", itens: [
+      { href: "solucoes.html", icone: "solucoes", cor: "amarelo", nome: "Soluções",
+        info: [[dados.solucoes.length, "soluções salvas"]],
+        rodape: solucoesNovas ? `${solucoesNovas} nova${solucoesNovas === 1 ? "" : "s"} na semana` : "Salve ao resolver um chamado" },
       { href: "relatorios.html", icone: "relatorios", cor: "laranja", nome: "Relatórios",
         info: [[dados.meuRelatorioHoje ? "Enviado" : "Pendente", "hoje", dados.meuRelatorioHoje ? "ok" : "aviso"]],
         rodape: dados.meuRelatorioHoje ? "Seu relatório de hoje está salvo" : "Preencha com 1 clique" },
       ...(ehAdmin() ? [
-        { href: "supervisao.html", icone: "supervisao", cor: "cinza", nome: "Supervisão",
+        { href: "supervisao.html", icone: "supervisao", cor: "cinza", nome: "Indicadores",
           info: [[noPrazo, "no prazo (30 dias)"]], rodape: `${resolvidos30.length} resolvidos em 30 dias` },
         { href: "usuarios.html", icone: "usuarios", cor: "cinza", nome: "Usuários",
           info: [[usuarios.length, "pessoas"]], rodape: `${usuarios.filter((u) => u.papel === "admin").length} admin(s)` }

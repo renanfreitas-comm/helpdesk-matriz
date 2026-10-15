@@ -12,7 +12,9 @@ import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
 import { observar, inserir, atualizar, excluir, listarUsuarios, paraDate } from "./db.js";
 import { PRAZO_HORAS, badgePrazo, situacaoPrazo, ordenarPorPrazo } from "./sla.js";
-import { botoesRapidos, ligarBotoesRapidos, mudarStatus, comentar } from "./acoes-chamado.js";
+import { botoesRapidos, ligarBotoesRapidos, mudarStatus, comentar, assumirChamado } from "./acoes-chamado.js";
+import { ausentesNoDia } from "./agenda-util.js";
+import { carregarSolucoes, sugerirSolucoes, htmlSugestao, marcarSolucaoUsada } from "./solucoes-util.js";
 
 let usuarioAtual = null;
 let perfilAtual = null;
@@ -21,6 +23,9 @@ let listaChamados = [];
 let visaoAtual = "ativos";
 let pararEventos = null;
 let detalheId = null;
+let modoVisual = lerPreferencia("hd-chamados-modo", "lista"); // "lista" | "quadro"
+let solucoes = [];
+let ausentesHoje = new Map();  // quem está de férias/atestado/folga hoje (Agenda)
 
 const tabelaBody = document.getElementById("tabela-chamados");
 const modal = document.getElementById("modal-chamado");
@@ -44,8 +49,32 @@ protegerPagina(async (user, perfil) => {
   if (!ehAdmin()) definirVisao("meus", false);
 
   await carregarUsuarios();
+  definirModo(modoVisual, false);
   observarChamados();
+  carregarSolucoes().then((l) => { solucoes = l; atualizarDetalheAberto(); });
+  carregarAusentes();
 });
+
+// Quem está fora hoje (férias, atestado, folga): aparece marcado na escolha
+// de responsável, para ninguém passar chamado para quem não está.
+async function carregarAusentes() {
+  ausentesHoje = await ausentesNoDia();
+}
+const ROTULO_AUSENCIA = { ferias: "de férias", atestado: "de atestado", folga: "de folga" };
+
+// -------------------- Lista ⇄ Quadro --------------------
+document.querySelectorAll(".alterna-visao button").forEach((b) => b.addEventListener("click", () => definirModo(b.dataset.modo)));
+function definirModo(modo, render = true) {
+  modoVisual = modo === "quadro" ? "quadro" : "lista";
+  gravarPreferencia("hd-chamados-modo", modoVisual);
+  document.querySelectorAll(".alterna-visao button").forEach((b) => b.classList.toggle("on", b.dataset.modo === modoVisual));
+  document.getElementById("quadro-chamados").hidden = modoVisual !== "quadro";
+  document.getElementById("lista-chamados").hidden = modoVisual === "quadro";
+  document.getElementById("dica-quadro").hidden = modoVisual !== "quadro";
+  if (render) renderizarTabela();
+}
+function lerPreferencia(chave, padrao) { try { return localStorage.getItem(chave) || padrao; } catch (e) { return padrao; } }
+function gravarPreferencia(chave, valor) { try { localStorage.setItem(chave, valor); } catch (e) { /* ignora */ } }
 
 // -------------------- Usuários --------------------
 async function carregarUsuarios() {
@@ -69,6 +98,12 @@ function observarChamados() {
   // Atualiza os textos de prazo ("vence em...") a cada minuto.
   setInterval(renderizarTabela, 60000);
 }
+
+// Link de notificação na mesma página (ex.: #c=<id>) também abre o chamado.
+window.addEventListener("hashchange", () => {
+  const m = window.location.hash.match(/^#c=(.+)$/);
+  if (m && decodeURIComponent(m[1]) !== detalheId) abrirDetalhe(decodeURIComponent(m[1]));
+});
 
 function abrirPeloEndereco() {
   const h = window.location.hash;
@@ -122,6 +157,8 @@ function renderizarTabela() {
   const fPrioridade = document.getElementById("filtro-prioridade").value;
   const fResponsavel = selectFiltroResponsavel.value;
 
+  if (modoVisual === "quadro") { renderizarQuadro(busca, fStatus, fPrioridade, fResponsavel); return; }
+
   let filtrados = listaChamados.filter((c) => {
     if (!passaNaVisao(c)) return false;
     if (fStatus && c.status !== fStatus) return false;
@@ -172,6 +209,136 @@ function renderizarTabela() {
   tabelaBody.querySelectorAll(".btn-excluir").forEach((b) => b.addEventListener("click", () => excluirChamado(b.dataset.id)));
 }
 
+
+// -------------------- Quadro (Kanban) --------------------
+// Colunas: Sem responsável → Aberto → Em andamento → Resolvido hoje.
+// Arrastar um card muda o status, com as mesmas regras do banco: técnico
+// assume os livres e só mexe nos dele; só o admin tira o responsável.
+const COLUNAS = [
+  { id: "livre", titulo: "Sem responsável" },
+  { id: "aberto", titulo: "Aberto" },
+  { id: "andamento", titulo: "Em andamento" },
+  { id: "resolvido", titulo: "Resolvido hoje" }
+];
+const quadroEl = document.getElementById("quadro-chamados");
+
+function colunaDe(c) {
+  if (c.status === "resolvido") return "resolvido";
+  if (!c.responsavelUid) return "livre";
+  return c.status;
+}
+function resolvidoHoje(c) {
+  if (c.status !== "resolvido" || !c.resolvidoEm) return false;
+  const d = paraDate(c.resolvidoEm);
+  return d && d.toDateString() === new Date().toDateString();
+}
+// Em tela de toque o arraste fica desligado: o dedo rola o quadro para o lado
+// e tocar no card abre os detalhes (com os botões Assumir/Iniciar/Resolver).
+const temMouse = window.matchMedia ? window.matchMedia("(pointer: fine)").matches : true;
+function podeMover(c) {
+  if (!temMouse) return false;
+  return ehAdmin() || !c.responsavelUid || c.responsavelUid === usuarioAtual.uid;
+}
+
+function renderizarQuadro(busca, fStatus, fPrioridade, fResponsavel) {
+  const lista = listaChamados.filter((c) => {
+    if (c.status === "resolvido" && !resolvidoHoje(c)) return false;
+    if (visaoAtual === "meus" && c.responsavelUid !== usuarioAtual.uid) return false;
+    if (visaoAtual === "livres" && c.responsavelUid) return false;
+    if (visaoAtual === "atrasados" && !situacaoPrazo(c).atrasado) return false;
+    if (fStatus && c.status !== fStatus) return false;
+    if (fPrioridade && c.prioridade !== fPrioridade) return false;
+    if (fResponsavel && c.responsavelUid !== fResponsavel) return false;
+    if (busca && !`${c.numero || ""} ${c.area || ""} ${c.atividade || ""} ${c.responsavelNome || ""}`.toLowerCase().includes(busca)) return false;
+    return true;
+  }).sort(ordenarPorPrazo);
+
+  document.getElementById("rodape-lista").textContent = "";
+  quadroEl.innerHTML = COLUNAS.map((col) => {
+    const itens = lista.filter((c) => colunaDe(c) === col.id);
+    if (col.id === "resolvido") itens.sort((a, b) => String(b.resolvidoEm).localeCompare(String(a.resolvidoEm)));
+    return `
+      <section class="coluna-quadro" data-coluna="${col.id}">
+        <h3>${col.titulo} <span>${itens.length}</span></h3>
+        <div class="coluna-cards">
+          ${itens.map(cardQuadro).join("") || `<p class="coluna-vazia">Nada aqui</p>`}
+        </div>
+      </section>`;
+  }).join("");
+
+  quadroEl.querySelectorAll(".card-quadro").forEach((card) => {
+    card.addEventListener("click", () => abrirDetalhe(card.dataset.id));
+    card.addEventListener("keydown", (e) => { if (e.key === "Enter") abrirDetalhe(card.dataset.id); });
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", card.dataset.id);
+      e.dataTransfer.effectAllowed = "move";
+      card.classList.add("arrastando");
+      quadroEl.classList.add("em-arraste");
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("arrastando");
+      quadroEl.classList.remove("em-arraste");
+      quadroEl.querySelectorAll(".coluna-quadro").forEach((c) => c.classList.remove("alvo"));
+    });
+  });
+  quadroEl.querySelectorAll(".coluna-quadro").forEach((col) => {
+    col.addEventListener("dragover", (e) => { e.preventDefault(); col.classList.add("alvo"); });
+    col.addEventListener("dragleave", (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove("alvo"); });
+    col.addEventListener("drop", (e) => {
+      e.preventDefault();
+      col.classList.remove("alvo");
+      const c = listaChamados.find((x) => x.id === e.dataTransfer.getData("text/plain"));
+      if (c) moverPara(c, col.dataset.coluna);
+    });
+  });
+}
+
+function cardQuadro(c) {
+  const sit = situacaoPrazo(c);
+  const iniciais = (c.responsavelNome || "").trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const prazo = c.status === "resolvido"
+    ? `<span class="badge badge-prazo-${sit.estado}">${sit.estado === "cumprido" ? "✓ " : ""}${sit.texto}</span>`
+    : badgePrazo(c);
+  return `
+    <article class="card-quadro ${sit.atrasado ? "atrasado" : ""}" data-id="${c.id}" tabindex="0"
+             draggable="${podeMover(c) ? "true" : "false"}" title="${podeMover(c) ? "Arraste para mudar o status, clique para ver detalhes" : "Toque para ver detalhes"}">
+      <span class="badge badge-prioridade-${c.prioridade}">${ROTULOS_PRIORIDADE[c.prioridade] || c.prioridade}</span>
+      <strong class="card-quadro-titulo">${escaparHTML(c.numero || "(sem número)")} · ${escaparHTML(c.area || "—")}</strong>
+      <span class="card-quadro-texto">${escaparHTML(truncar(c.atividade, 90))}</span>
+      <span class="card-quadro-rodape">
+        <span class="card-quadro-pessoa">${c.responsavelNome
+          ? `<span class="avatar mini">${escaparHTML(iniciais)}</span>${escaparHTML(c.responsavelNome.split(" ")[0])}${c.responsavelUid === usuarioAtual.uid ? " (você)" : ""}`
+          : `<span class="texto-suave">Não atribuído</span>`}</span>
+        ${prazo}
+      </span>
+    </article>`;
+}
+
+async function moverPara(c, destino) {
+  const origem = colunaDe(c);
+  if (origem === destino) return;
+  const eu = usuarioAtual.uid;
+  if (c.responsavelUid && c.responsavelUid !== eu && !ehAdmin()) {
+    alert(`Este chamado é de ${c.responsavelNome || "outra pessoa"}. Só o responsável ou o supervisor podem movê-lo.`);
+    return;
+  }
+  try {
+    if (destino === "livre") {
+      if (!ehAdmin()) { alert("Só o supervisor pode tirar o responsável de um chamado."); return; }
+      await atualizar("chamados", c.id, { responsavelUid: null, status: "aberto" });
+    } else if (destino === "aberto") {
+      await atualizar("chamados", c.id, c.responsavelUid ? { status: "aberto" } : { responsavelUid: eu, status: "aberto" });
+    } else if (destino === "andamento") {
+      if (!c.responsavelUid) await assumirChamado(c, eu);
+      else await mudarStatus(c, "andamento");
+    } else if (destino === "resolvido") {
+      await mudarStatus(c, "resolvido", { extra: c.responsavelUid ? {} : { responsavelUid: eu } });
+    }
+  } catch (err) {
+    alert("Não foi possível mover: " + err.message);
+  }
+}
+
 ["filtro-status", "filtro-prioridade", "filtro-responsavel"].forEach((id) =>
   document.getElementById(id).addEventListener("change", renderizarTabela));
 document.getElementById("filtro-busca").addEventListener("input", () => {
@@ -201,7 +368,11 @@ function preencherSelectResponsavel() {
   // Admin escolhe qualquer pessoa; técnico só "eu" ou "sem responsável".
   const lista = ehAdmin() ? listaUsuarios : listaUsuarios.filter((u) => u.uid === usuarioAtual.uid);
   selectResponsavel.innerHTML = `<option value="">Sem responsável</option>` +
-    lista.map((u) => `<option value="${u.uid}">${u.uid === usuarioAtual.uid ? "Eu (" + escaparHTML(u.nome) + ")" : escaparHTML(u.nome)}</option>`).join("");
+    lista.map((u) => {
+      const fora = ausentesHoje.get(u.uid);
+      const nome = u.uid === usuarioAtual.uid ? "Eu (" + escaparHTML(u.nome) + ")" : escaparHTML(u.nome);
+      return `<option value="${u.uid}">${nome}${fora ? " — " + ROTULO_AUSENCIA[fora] + " hoje" : ""}</option>`;
+    }).join("");
 }
 
 function abrirModal(modo, chamadoId = null) {
@@ -342,6 +513,7 @@ function renderizarDetalhe() {
     <div><dt>Aberto em</dt><dd>${formatarDataHora(c.criadoEm)}</dd></div>
     ${c.resolvidoEm ? `<div><dt>Resolvido em</dt><dd>${formatarDataHora(c.resolvidoEm)}</dd></div>` : ""}`;
   document.getElementById("detalhe-atividade").textContent = c.atividade || "";
+  renderizarSugestao(c);
 
   // Ações: as mesmas da lista + reabrir (para o responsável/admin).
   const podeMexer = ehAdmin() || c.responsavelUid === usuarioAtual.uid;
@@ -359,6 +531,37 @@ function renderizarDetalhe() {
   });
   const editar = document.getElementById("btn-editar-detalhe");
   if (editar) editar.addEventListener("click", () => abrirModal("editar", c.id));
+}
+
+// -------------------- Solução sugerida (Base de soluções) --------------------
+let indiceSugestao = 0;
+let sugestaoDoChamado = null;
+function renderizarSugestao(c) {
+  if (sugestaoDoChamado !== c.id) { indiceSugestao = 0; sugestaoDoChamado = c.id; }
+  const el = document.getElementById("detalhe-sugestao");
+  const sugestoes = sugerirSolucoes(c, solucoes);
+  el.innerHTML = htmlSugestao(c, sugestoes, indiceSugestao);
+  const outra = el.querySelector(".js-sol-outra");
+  if (outra) outra.addEventListener("click", () => { indiceSugestao++; renderizarSugestao(c); });
+  const resolveu = el.querySelector(".js-sol-resolveu");
+  if (resolveu) resolveu.addEventListener("click", async () => {
+    const s = sugestoes[indiceSugestao % sugestoes.length];
+    resolveu.disabled = true;
+    try {
+      await marcarSolucaoUsada(s.id, c.id);
+      s.usos = (s.usos || 0) + 1;
+      const podeResolver = ehAdmin() || c.responsavelUid === usuarioAtual.uid || !c.responsavelUid;
+      if (podeResolver && confirm(`Ótimo! Quer marcar o chamado ${c.numero || ""} como resolvido agora?`)) {
+        await mudarStatus(c, "resolvido", { perguntarNota: false, extra: c.responsavelUid ? {} : { responsavelUid: usuarioAtual.uid } });
+        await comentar(c.id, `Resolvido com a solução: ${s.titulo}`);
+      } else {
+        renderizarSugestao(c);
+      }
+    } catch (err) {
+      alert("Não foi possível registrar: " + err.message);
+      resolveu.disabled = false;
+    }
+  });
 }
 
 function renderizarEventos(eventos) {

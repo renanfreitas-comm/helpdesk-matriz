@@ -2,6 +2,7 @@
 // AÇÕES RÁPIDAS DE CHAMADO (usadas no Dashboard e na tela de Chamados)
 // ==========================================================================
 import { atualizar, inserir } from "./db.js";
+import { abrirResolver } from "./solucoes-util.js";
 
 /** O técnico assume um chamado sem responsável e já começa o atendimento. */
 export async function assumirChamado(chamado, uid) {
@@ -12,19 +13,20 @@ export async function assumirChamado(chamado, uid) {
 }
 
 /**
- * Muda o status. Ao resolver, pergunta (opcional) o que foi feito e grava
- * como comentário na linha do tempo do chamado.
- * Devolve false se a pessoa cancelar.
+ * Muda o status. Ao resolver, abre a janela "Resolver chamado": a pessoa
+ * conta como resolveu (vai para a linha do tempo) e pode salvar na Base de
+ * soluções. Devolve false se a pessoa cancelar.
+ * "extra" permite mudar outros campos junto (ex.: assumir e resolver).
  */
-export async function mudarStatus(chamado, novoStatus, { perguntarNota = true } = {}) {
-  let nota = "";
+export async function mudarStatus(chamado, novoStatus, { perguntarNota = true, extra = {} } = {}) {
+  const gravar = async (nota) => {
+    await atualizar("chamados", chamado.id, { ...extra, status: novoStatus });
+    if (nota) await comentar(chamado.id, nota);
+  };
   if (novoStatus === "resolvido" && perguntarNota) {
-    const resposta = prompt(`Resolver o chamado ${chamado.numero || ""}.\n\nO que foi feito? (opcional — fica na linha do tempo do chamado)`, "");
-    if (resposta === null) return false; // cancelou
-    nota = resposta.trim();
+    return abrirResolver(chamado, ({ nota }) => gravar(nota));
   }
-  await atualizar("chamados", chamado.id, { status: novoStatus });
-  if (nota) await comentar(chamado.id, nota);
+  await gravar("");
   return true;
 }
 

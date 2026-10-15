@@ -279,6 +279,20 @@ Faça **nesta ordem**:
 4. Em **Usuários**, troque o papel da conta desejada para **Painel de TV**. Se ela ainda tiver tarefas ou chamados em aberto, passe-os para outra pessoa antes.
 5. Na TV: entre com essa conta, clique em **Tela cheia** (aparece ao mexer o mouse) e deixe aberto.
 
+### Outubro/2026 — Quadro, Indicadores, Soluções, Agenda e Notificações (fazer uma vez)
+
+- **Chamados → Quadro:** botão Lista ⇄ Quadro. Arraste o card entre Sem responsável, Aberto, Em andamento e Resolvido hoje. As regras de sempre valem: o técnico assume os livres e só mexe nos dele; só o admin tira o responsável.
+- **Resolver chamado:** agora abre uma janela "Como você resolveu?" (vai para a linha do tempo), com a opção de salvar na Base de soluções.
+- **Soluções (menu):** biblioteca do que o time já resolveu, com busca e categorias. Dentro do chamado aparece "Solução que já funcionou em casos parecidos"; o botão "Resolveu ✓" conta o uso.
+- **Agenda (menu):** semana por pessoa com férias, atestado, folga, plantão e treinamento, mais visitas e tarefas do dia. Quem está de férias, atestado ou folga aparece marcado na escolha de responsável, some do Painel de TV e não recebe o relatório das 18h.
+- **Indicadores (antiga Supervisão):** SLA, tempo médio, abertos × resolvidos, carga por técnico, áreas e uma leitura automática, sempre comparando com o período anterior. "Exportar PDF" abre a impressão (escolha "Salvar como PDF"). Os relatórios do time continuam na aba "Relatórios do time".
+- **Notificações (sino ao lado do logo):** chamado passado para você, menção com @nome nos comentários, comentário no seu chamado, chamado que você abriu foi resolvido, tarefa nova, chamado novo sem responsável e alertas de prazo. Avisos novos aparecem no canto da tela; no sino dá para ligar também os avisos do navegador.
+
+Faça **nesta ordem**:
+1. **Site:** `git add .`, `git commit -m "Quadro, indicadores, soluções, agenda e notificações"`, `git push`, e espere 2 minutos.
+2. **Banco:** rode o `supabase/schema.sql` inteiro no **SQL Editor** (cria as tabelas solucoes, agenda_eventos e notificacoes e liga o tempo real nelas).
+3. Todos dão **Ctrl+F5** uma vez.
+
 ### Relatório de pendências das 18h
 
 Ele usa a mesma propriedade `SUPABASE_SERVICE_KEY` do backup diário. Se o backup ainda não foi ligado, siga o passo 1 de "Backup diário" antes.
