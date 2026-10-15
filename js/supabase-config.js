@@ -30,8 +30,73 @@ if (!CONFIGURADO) {
   if (document.body) avisar(); else document.addEventListener("DOMContentLoaded", avisar);
 }
 
+// --------------------------------------------------------------------------
+// LOGIN SEPARADO POR ABA
+// O login fica no sessionStorage (que é de cada aba) com um nome único por
+// aba. Assim duas pessoas podem usar abas diferentes do mesmo navegador sem
+// uma "espelhar" a outra, e o "Sair" de uma aba não derruba as outras.
+// Recarregar a página (F5) mantém o login; fechar a aba encerra.
+// --------------------------------------------------------------------------
+function idDaAba() {
+  try {
+    let id = sessionStorage.getItem("hd-aba");
+    if (!id) {
+      id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+      sessionStorage.setItem("hd-aba", id);
+    }
+    return id;
+  } catch (e) {
+    return "padrao"; // navegação muito restrita: cai no comportamento antigo
+  }
+}
+
+// "Duplicar aba" copia o sessionStorage, e a cópia passaria a dividir o
+// login com a original. Cada aba segura uma trava com o seu id; se a trava
+// já estiver ocupada, esta aba é uma cópia: ganha id novo e pede login.
+async function idDaAbaUnico() {
+  const id = idDaAba();
+  if (id === "padrao" || !navigator.locks) return id;
+  const segurar = (nome) => new Promise((pronto) => {
+    navigator.locks.request(nome, { ifAvailable: true }, (trava) => {
+      pronto(Boolean(trava));
+      return trava ? new Promise(() => {}) : undefined; // mantém enquanto a aba existir
+    }).catch(() => pronto(true));
+  });
+  if (await segurar("hd-aba-" + id)) return id;
+  try {
+    sessionStorage.removeItem("hd-auth-" + id);
+    sessionStorage.removeItem("hd-aba");
+  } catch (e) { /* ignora */ }
+  const novo = idDaAba();
+  segurar("hd-aba-" + novo);
+  return novo;
+}
+
+function armazenamentoDaAba() {
+  try {
+    sessionStorage.setItem("hd-teste", "1");
+    sessionStorage.removeItem("hd-teste");
+    return window.sessionStorage;
+  } catch (e) {
+    return undefined; // usa o padrão do Supabase
+  }
+}
+
+// Remove o login antigo, que ficava compartilhado entre todas as abas.
+try {
+  Object.keys(localStorage).filter((k) => /^sb-.*-auth-token/.test(k)).forEach((k) => localStorage.removeItem(k));
+} catch (e) { /* ignora */ }
+
 export const supabase = createClient(
   CONFIGURADO ? SUPABASE_URL : "https://nao-configurado.supabase.co",
   CONFIGURADO ? SUPABASE_ANON_KEY : "nao-configurado",
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: armazenamentoDaAba(),
+      storageKey: "hd-auth-" + (await idDaAbaUnico())
+    }
+  }
 );

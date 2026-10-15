@@ -259,6 +259,15 @@ Faça **nesta ordem**:
 
 Se o banco for atualizado antes do site, quem estiver com a versão antiga aberta perde o acesso aos dados até recarregar a página. Depois do passo 2, cada pessoa precisa recarregar o site (Ctrl+F5) uma vez.
 
+### Outubro/2026 — login separado por aba (fazer uma vez)
+
+Cada aba do navegador tem o próprio login: duas pessoas podem usar abas diferentes da mesma máquina sem uma "espelhar" a outra, e o **Sair** de uma aba não fecha as outras. F5 mantém o login; **fechar a aba encerra o login dela**. "Duplicar aba" abre na tela de login.
+
+Faça **nesta ordem**:
+1. **Primeiro o site:** `git add .`, `git commit -m "Login separado por aba"`, `git push`, e espere 2 minutos.
+2. **Depois o banco:** rode o `supabase/schema.sql` inteiro no **SQL Editor**.
+3. Todos precisam entrar de novo uma vez (Ctrl+F5 e login).
+
 ### Relatório de pendências das 18h
 
 Ele usa a mesma propriedade `SUPABASE_SERVICE_KEY` do backup diário. Se o backup ainda não foi ligado, siga o passo 1 de "Backup diário" antes.

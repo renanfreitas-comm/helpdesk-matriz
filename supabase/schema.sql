@@ -51,6 +51,10 @@ create table if not exists public.sessoes_ativas (
   iniciada_em      timestamptz not null default now(),
   ultimo_sinal     timestamptz not null default now()
 );
+-- Logins (session_id) abertos nesta máquina: cada aba do navegador tem o
+-- seu próprio login, então a mesma pessoa pode ter várias abas abertas na
+-- MESMA máquina sem uma derrubar a outra.
+alter table public.sessoes_ativas add column if not exists sessoes_auth text[] not null default '{}';
 
 -- A requisição atual vem da sessão registrada para esta pessoa?
 -- (Se o token não trouxer session_id, não bloqueia — evita trancar todos.)
@@ -60,7 +64,8 @@ returns boolean language sql stable security definer set search_path = public as
     when coalesce(auth.jwt() ->> 'session_id', '') = '' then true
     else exists (select 1 from public.sessoes_ativas s
                  where s.usuario_id = auth.uid()
-                   and s.sessao_auth = auth.jwt() ->> 'session_id')
+                   and (s.sessao_auth = auth.jwt() ->> 'session_id'
+                        or (auth.jwt() ->> 'session_id') = any (s.sessoes_auth)))
   end;
 $$;
 
@@ -101,11 +106,23 @@ begin
       'dispositivo', atual.dispositivo_nome, 'desde', atual.iniciada_em, 'ultimo_sinal', atual.ultimo_sinal);
   end if;
 
-  insert into public.sessoes_ativas (usuario_id, dispositivo_id, dispositivo_nome, sessao_auth, iniciada_em, ultimo_sinal)
-  values (auth.uid(), p_dispositivo, left(coalesce(p_nome, ''), 120), sid, now(), now())
+  insert into public.sessoes_ativas (usuario_id, dispositivo_id, dispositivo_nome, sessao_auth, sessoes_auth, iniciada_em, ultimo_sinal)
+  values (auth.uid(), p_dispositivo, left(coalesce(p_nome, ''), 120), sid,
+          case when sid is null then '{}'::text[] else array[sid] end, now(), now())
   on conflict (usuario_id) do update set
     iniciada_em = case when public.sessoes_ativas.dispositivo_id = excluded.dispositivo_id
                        then public.sessoes_ativas.iniciada_em else now() end,
+    -- Mesma máquina: acrescenta este login (outra aba) aos que já existem,
+    -- guardando no máximo os 20 mais recentes. Outra máquina: começa do zero.
+    sessoes_auth = case
+      when public.sessoes_ativas.dispositivo_id = excluded.dispositivo_id then
+        (select coalesce(array_agg(x order by ord), '{}') from (
+           select x, max(ord) as ord
+             from unnest(array_remove(public.sessoes_ativas.sessoes_auth
+                                      || public.sessoes_ativas.sessao_auth
+                                      || excluded.sessao_auth, null)) with ordinality as u(x, ord)
+            group by x order by max(ord) desc limit 20) z)
+      else excluded.sessoes_auth end,
     dispositivo_id = excluded.dispositivo_id,
     dispositivo_nome = excluded.dispositivo_nome,
     sessao_auth = excluded.sessao_auth,
@@ -120,15 +137,29 @@ returns boolean language plpgsql security definer set search_path = public as $$
 begin
   update public.sessoes_ativas set ultimo_sinal = now()
    where usuario_id = auth.uid() and dispositivo_id = p_dispositivo
-     and sessao_auth is not distinct from nullif(auth.jwt() ->> 'session_id', '');
+     and (nullif(auth.jwt() ->> 'session_id', '') is null
+          or sessao_auth = auth.jwt() ->> 'session_id'
+          or (auth.jwt() ->> 'session_id') = any (sessoes_auth));
   return found;
 end $$;
 
--- Ao clicar em "Sair": libera a vaga na hora.
+-- Ao clicar em "Sair": encerra só o login DESTA aba. Quando não sobra
+-- nenhuma aba logada nesta máquina, libera a vaga na hora.
 create or replace function public.encerrar_sessao(p_dispositivo text)
-returns void language sql security definer set search_path = public as $$
-  delete from public.sessoes_ativas where usuario_id = auth.uid() and dispositivo_id = p_dispositivo;
-$$;
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  sid text := nullif(auth.jwt() ->> 'session_id', '');
+begin
+  if sid is not null then
+    update public.sessoes_ativas
+       set sessoes_auth = array_remove(sessoes_auth, sid),
+           sessao_auth = case when sessao_auth = sid then null else sessao_auth end
+     where usuario_id = auth.uid() and dispositivo_id = p_dispositivo;
+  end if;
+  delete from public.sessoes_ativas
+   where usuario_id = auth.uid() and dispositivo_id = p_dispositivo
+     and (sid is null or (sessao_auth is null and cardinality(sessoes_auth) = 0));
+end $$;
 
 -- Admin desconecta alguém (ex.: esqueceu o PC ligado e precisa entrar em outro).
 create or replace function public.derrubar_sessao(p_usuario uuid)
