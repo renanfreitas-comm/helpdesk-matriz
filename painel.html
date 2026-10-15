@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Tarefas — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="painel-tv">
+
+  <header class="tv-topo">
+    <div class="tv-marca">
+      <img src="assets/logo-comm-branco.png" alt="Comm" />
+      <div>
+        <h1>Tarefas do dia</h1>
+        <p id="tv-data">—</p>
+      </div>
+    </div>
+
+    <div class="tv-progresso" aria-live="polite">
+      <div class="tv-anel" id="tv-anel" style="--p:0">
+        <span id="tv-percentual">0%</span>
+      </div>
+      <div>
+        <strong id="tv-feitas">0 de 0 tarefas feitas</strong>
+        <span id="tv-faltam">—</span>
+      </div>
+    </div>
+
+    <div class="tv-numeros">
+      <div class="tv-numero"><strong id="tv-num-pendentes">0</strong><span>tarefas pendentes</span></div>
+      <div class="tv-numero"><strong id="tv-num-chamados">0</strong><span>chamados em aberto</span></div>
+      <div class="tv-numero alerta" id="tv-caixa-atrasados"><strong id="tv-num-atrasados">0</strong><span>chamados atrasados</span></div>
+    </div>
+
+    <div class="tv-relogio">
+      <strong id="tv-hora">--:--</strong>
+      <span id="tv-conexao" class="tv-conexao">conectando…</span>
+    </div>
+  </header>
+
+  <main class="tv-corpo">
+    <section class="tv-equipe" id="tv-equipe" aria-label="Progresso por técnico">
+      <p class="tv-vazio">Carregando…</p>
+    </section>
+
+    <aside class="tv-lateral">
+      <h2>Concluídas recentemente</h2>
+      <ol class="tv-feed" id="tv-feed"></ol>
+    </aside>
+  </main>
+
+  <div class="tv-controles" id="tv-controles">
+    <button type="button" id="tv-tela-cheia">Tela cheia</button>
+    <button type="button" id="tv-sair">Sair</button>
+  </div>
+
+  <script type="module" src="js/painel.js"></script>
+</body>
+</html>

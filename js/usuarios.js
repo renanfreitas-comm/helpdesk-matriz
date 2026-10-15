@@ -86,6 +86,8 @@ function traduzirErroCadastro(err) {
   return mapa[err && err.code] || (err && err.message) || "Erro ao criar usuário. Tente novamente.";
 }
 
+const ROTULO_PAPEL = { tecnico: "Técnico", admin: "Supervisor/Admin", painel: "Painel de TV" };
+
 function renderizarTabela() {
   if (listaUsuarios.length === 0) {
     tabelaBody.innerHTML = `<tr><td colspan="5" class="vazio">Nenhum usuário encontrado.</td></tr>`;
@@ -97,25 +99,20 @@ function renderizarTabela() {
   tabelaBody.innerHTML = listaUsuarios.map((u) => {
     const ehVoce = u.uid === usuarioLogadoUid;
     const ultimoAdmin = u.papel === "admin" && totalAdmins <= 1;
-    const rotuloPapel = u.papel === "admin" ? "Supervisor/Admin" : "Técnico";
-    const classePapel = u.papel === "admin" ? "badge-admin" : "badge-tecnico";
+    const rotuloPapel = ROTULO_PAPEL[u.papel] || "Técnico";
+    const classePapel = "badge-" + (ROTULO_PAPEL[u.papel] ? u.papel : "tecnico");
 
     let acao;
     if (ehVoce) {
       acao = `<span class="texto-suave" title="Peça a outro admin para alterar sua conta">Sua conta</span>`;
     } else if (ultimoAdmin) {
       acao = `<div class="acoes-tabela">${btnSenha(u)}<span class="texto-suave" title="Precisa haver pelo menos um admin">Único admin</span></div>`;
-    } else if (u.papel === "admin") {
-      acao = `
-        <div class="acoes-tabela">
-          <button class="botao-secundario btn-rebaixar" data-id="${u.uid}">Rebaixar a técnico</button>
-          ${btnSenha(u)}
-          <button class="botao-perigo btn-excluir-usuario" data-id="${u.uid}">Excluir</button>
-        </div>`;
     } else {
       acao = `
         <div class="acoes-tabela">
-          <button class="botao-secundario btn-promover" data-id="${u.uid}">Tornar admin</button>
+          <select class="sel-papel" data-id="${u.uid}" aria-label="Papel de ${escaparHTML(u.nome)}">
+            ${Object.entries(ROTULO_PAPEL).map(([v, r]) => `<option value="${v}" ${v === u.papel ? "selected" : ""}>${r}</option>`).join("")}
+          </select>
           ${btnSenha(u)}
           <button class="botao-perigo btn-excluir-usuario" data-id="${u.uid}">Excluir</button>
         </div>`;
@@ -131,10 +128,8 @@ function renderizarTabela() {
       </tr>`;
   }).join("");
 
-  document.querySelectorAll(".btn-promover").forEach((b) =>
-    b.addEventListener("click", () => alterarPapel(b.dataset.id, "admin")));
-  document.querySelectorAll(".btn-rebaixar").forEach((b) =>
-    b.addEventListener("click", () => alterarPapel(b.dataset.id, "tecnico")));
+  document.querySelectorAll(".sel-papel").forEach((sel) =>
+    sel.addEventListener("change", () => alterarPapel(sel.dataset.id, sel.value, sel)));
   document.querySelectorAll(".btn-excluir-usuario").forEach((b) =>
     b.addEventListener("click", () => excluirUsuario(b.dataset.id)));
   document.querySelectorAll(".btn-nova-senha").forEach((b) =>
@@ -143,14 +138,21 @@ function renderizarTabela() {
     b.addEventListener("click", () => desconectar(b.dataset.id)));
 }
 
-async function alterarPapel(uid, novoPapel) {
-  const rotulo = novoPapel === "admin" ? "supervisor/admin" : "técnico";
-  if (!confirm(`Confirma alterar este usuário para ${rotulo}?`)) return;
+async function alterarPapel(uid, novoPapel, seletor) {
+  const u = listaUsuarios.find((x) => x.uid === uid);
+  const aviso = novoPapel === "painel"
+    ? "\n\nA conta de painel só enxerga o painel de Tarefas (para TV), não grava nada e não recebe tarefas nem chamados."
+    : "";
+  if (!confirm(`Confirma alterar ${u ? u.nome : "este usuário"} para ${ROTULO_PAPEL[novoPapel]}?${aviso}`)) {
+    if (seletor && u) seletor.value = u.papel;
+    return;
+  }
 
   try {
     await atualizar("usuarios", uid, { papel: novoPapel });
   } catch (err) {
     alert("Erro ao atualizar papel: " + err.message);
+    if (seletor && u) seletor.value = u.papel;
   }
 }
 

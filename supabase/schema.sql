@@ -34,9 +34,13 @@ create table if not exists public.usuarios (
   id         uuid primary key references auth.users (id) on delete cascade,
   nome       text not null check (char_length(nome) between 1 and 120),
   email      text not null check (email = lower(email) and char_length(email) <= 200),
-  papel      text not null default 'tecnico' check (papel in ('tecnico', 'admin')),
+  papel      text not null default 'tecnico' check (papel in ('tecnico', 'admin', 'painel')),
   criado_em  timestamptz not null default now()
 );
+-- Papel "painel": conta só de leitura para a TV/monitor com o painel de
+-- tarefas. Vê tarefas, conclusões e chamados; não grava nada.
+alter table public.usuarios drop constraint if exists usuarios_papel_check;
+alter table public.usuarios add constraint usuarios_papel_check check (papel in ('tecnico', 'admin', 'painel'));
 
 -- ------------------------------------------------- SESSÃO: UMA MÁQUINA POR VEZ
 -- Uma linha por pessoa conectada: em qual máquina (navegador) está, qual
@@ -74,8 +78,21 @@ $$;
 -- "Membro" = tem perfil E está usando a sessão registrada (uma máquina só).
 create or replace function public.eh_membro()
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.usuarios where id = auth.uid())
+  select exists (select 1 from public.usuarios where id = auth.uid() and papel <> 'painel')
      and public.sessao_atual_valida();
+$$;
+
+-- Conta do painel de TV (só leitura de tarefas e chamados).
+create or replace function public.eh_painel()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.usuarios where id = auth.uid() and papel = 'painel')
+     and public.sessao_atual_valida();
+$$;
+
+-- A conta de painel nunca pode ser responsável por chamado ou tarefa.
+create or replace function public.conta_eh_painel(p_uid uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.usuarios where id = p_uid and papel = 'painel');
 $$;
 
 create or replace function public.eh_admin()
@@ -206,6 +223,11 @@ begin
        and (select count(*) from public.usuarios where papel = 'admin') <= 1 then
       raise exception 'Precisa haver pelo menos um supervisor/admin no sistema.';
     end if;
+    if new.papel = 'painel' and old.papel <> 'painel'
+       and (exists (select 1 from public.tarefas where responsavel_uid = old.id and ativa)
+            or exists (select 1 from public.chamados where responsavel_uid = old.id and status <> 'resolvido')) then
+      raise exception 'Esta pessoa ainda é responsável por tarefas ou chamados em aberto. Passe-os para outra pessoa antes de transformar a conta em painel.';
+    end if;
     return new;
   elsif tg_op = 'DELETE' then
     if old.papel = 'admin'
@@ -290,6 +312,9 @@ begin
     end if;
   end if;
 
+  if public.conta_eh_painel(new.responsavel_uid) then
+    raise exception 'A conta de painel (TV) não pode ser responsável por chamados.' using errcode = '42501';
+  end if;
   -- Nome do responsável sempre coerente com o cadastro.
   new.responsavel_nome := case when new.responsavel_uid is null then null
                                else public.nome_usuario(new.responsavel_uid) end;
@@ -631,6 +656,9 @@ create trigger tarefas_regras before insert or update on public.tarefas
 create or replace function public.tg_tarefas_responsavel()
 returns trigger language plpgsql as $$
 begin
+  if public.conta_eh_painel(new.responsavel_uid) then
+    raise exception 'A conta de painel (TV) não pode ser responsável por tarefas.' using errcode = '42501';
+  end if;
   new.responsavel_nome := case when new.responsavel_uid is null then null
                                else public.nome_usuario(new.responsavel_uid) end;
   return new;
@@ -690,6 +718,7 @@ returns jsonb language sql stable security definer set search_path = public as $
       ), '[]'::jsonb)
     ) as p
     from public.usuarios u
+    where u.papel <> 'painel'
   ) s;
 $$;
 revoke execute on function public.relatorio_pendencias(date) from public, anon, authenticated;
@@ -724,7 +753,7 @@ end $$;
 -- responsável etc.). Só admin muda papel/nome. Criar/excluir conta é feito
 -- pela função "admin-usuarios" (Edge Function), nunca direto do site.
 create policy usuarios_ler on public.usuarios for select to authenticated
-  using (id = auth.uid() or (select public.eh_membro()));
+  using (id = auth.uid() or (select public.eh_membro()) or (select public.eh_painel()));
 -- sessoes_ativas: cada um vê a própria; admin vê todas (painel de sessões).
 -- Gravações só pelas funções reivindicar/sinal/encerrar/derrubar_sessao.
 create policy sessoes_ler on public.sessoes_ativas for select to authenticated
@@ -735,7 +764,7 @@ create policy usuarios_editar on public.usuarios for update to authenticated
 
 -- chamados
 create policy chamados_ler on public.chamados for select to authenticated
-  using ((select public.eh_membro()));
+  using ((select public.eh_membro()) or (select public.eh_painel()));
 create policy chamados_criar on public.chamados for insert to authenticated
   with check ((select public.eh_membro()));
 create policy chamados_editar on public.chamados for update to authenticated
@@ -806,7 +835,7 @@ create policy visitas_excluir on public.visitas for delete to authenticated
 
 -- tarefas: todos do time veem as de todos; só admin cria, edita e exclui.
 create policy tarefas_ler on public.tarefas for select to authenticated
-  using ((select public.eh_membro()));
+  using ((select public.eh_membro()) or (select public.eh_painel()));
 create policy tarefas_criar on public.tarefas for insert to authenticated
   with check ((select public.eh_admin()));
 create policy tarefas_editar on public.tarefas for update to authenticated
@@ -817,7 +846,7 @@ create policy tarefas_excluir on public.tarefas for delete to authenticated
 -- tarefa_conclusoes: todos veem; técnico marca/desmarca as próprias só no
 -- dia de hoje; admin marca/desmarca qualquer uma, em qualquer data.
 create policy conclusoes_ler on public.tarefa_conclusoes for select to authenticated
-  using ((select public.eh_membro()));
+  using ((select public.eh_membro()) or (select public.eh_painel()));
 create policy conclusoes_marcar on public.tarefa_conclusoes for insert to authenticated
   with check ((select public.eh_membro()) and public.pode_concluir_tarefa(tarefa_id, data));
 create policy conclusoes_desmarcar on public.tarefa_conclusoes for delete to authenticated

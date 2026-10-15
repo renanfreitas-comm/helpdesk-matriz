@@ -102,7 +102,7 @@ export async function obterPerfil(uid) {
  * O callback recebe (user, perfil), onde user = { uid, email }.
  *
  * @param {(user: {uid:string,email:string}, perfil: object) => void} callback
- * @param {{ apenasAdmin?: boolean }} opcoes
+ * @param {{ apenasAdmin?: boolean, paginaPainel?: boolean }} opcoes
  */
 export async function protegerPagina(callback, opcoes = {}) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -124,6 +124,12 @@ export async function protegerPagina(callback, opcoes = {}) {
     return;
   }
 
+  // A conta de painel (TV) só tem a tela do painel de tarefas.
+  if (perfil.papel === "painel" && !opcoes.paginaPainel) {
+    window.location.replace("painel.html");
+    return;
+  }
+
   // Uma máquina por vez: confirma que esta máquina ainda tem a vaga.
   let vaga;
   try {
@@ -137,7 +143,9 @@ export async function protegerPagina(callback, opcoes = {}) {
     await sairComMotivo("outra-maquina");
     return;
   }
-  if (!vaga.semControle) iniciarMonitorSessao((motivo) => sairComMotivo(motivo));
+  if (!vaga.semControle) {
+    iniciarMonitorSessao((motivo) => sairComMotivo(motivo), { semInatividade: perfil.papel === "painel" });
+  }
 
   if (opcoes.apenasAdmin && perfil.papel !== "admin") {
     alert("Apenas o supervisor/admin pode acessar esta página.");

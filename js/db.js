@@ -169,10 +169,13 @@ export function observar(tabela, montar, aoReceber, aoErrar, opcoes = {}) {
   };
 }
 
-/** Lista de usuários no formato usado pelas telas: { uid, nome, email, papel }. */
-export async function listarUsuarios() {
+/**
+ * Lista de usuários no formato usado pelas telas: { uid, nome, email, papel }.
+ * A conta de painel (TV) fica de fora: ela não atende chamados nem recebe tarefas.
+ */
+export async function listarUsuarios({ incluirPainel = false } = {}) {
   const linhas = await buscarTodos("usuarios", (q) => q.order("nome"));
-  return linhas.map((u) => ({ uid: u.id, ...u }));
+  return linhas.map((u) => ({ uid: u.id, ...u })).filter((u) => incluirPainel || u.papel !== "painel");
 }
 
 /** Converte data/hora do banco (texto ISO) em Date, ou null. */

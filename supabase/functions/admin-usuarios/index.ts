@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
         const senha = String(corpo.senha ?? "");
         const papel = String(corpo.papel ?? "tecnico");
 
-        if (!nome || nome.length > 120 || !["tecnico", "admin"].includes(papel)) {
+        if (!nome || nome.length > 120 || !["tecnico", "admin", "painel"].includes(papel)) {
           return erro("dados_invalidos", "Confira nome e papel.");
         }
         if (!EMAIL_VALIDO.test(email)) return erro("email_invalido", "E-mail inválido.");

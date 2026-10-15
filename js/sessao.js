@@ -78,9 +78,9 @@ export function mensagemEmUso(r) {
 /**
  * Mantém a sessão viva e vigia se ela continua válida. Chama aoPerder(motivo)
  * quando esta máquina perde a vaga ("desconectado") ou fica parada demais
- * ("inatividade").
+ * ("inatividade"). Com semInatividade (painel de TV), só a vaga é vigiada.
  */
-export function iniciarMonitorSessao(aoPerder) {
+export function iniciarMonitorSessao(aoPerder, { semInatividade = false } = {}) {
   let ultimaAtividade = Date.now();
   let encerrado = false;
   const marcarAtividade = () => { ultimaAtividade = Date.now(); };
@@ -89,7 +89,7 @@ export function iniciarMonitorSessao(aoPerder) {
 
   const verificar = async () => {
     if (encerrado) return;
-    if (MINUTOS_INATIVIDADE > 0 && Date.now() - ultimaAtividade > MINUTOS_INATIVIDADE * 60000) {
+    if (!semInatividade && MINUTOS_INATIVIDADE > 0 && Date.now() - ultimaAtividade > MINUTOS_INATIVIDADE * 60000) {
       encerrado = true;
       aoPerder("inatividade");
       return;

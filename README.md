@@ -268,6 +268,17 @@ Faça **nesta ordem**:
 2. **Depois o banco:** rode o `supabase/schema.sql` inteiro no **SQL Editor**.
 3. Todos precisam entrar de novo uma vez (Ctrl+F5 e login).
 
+### Outubro/2026 — Painel de TV (conta só de tarefas)
+
+Novo papel **Painel de TV**: a conta só enxerga `painel.html`, um dashboard de tarefas para deixar aberto numa TV ou monitor (progresso de cada técnico, chamados em aberto com SLA, concluídas recentemente). É só leitura, atualiza sozinho, vira o dia à meia-noite e não desloga por inatividade. Os admins também podem abrir o painel pelo menu (**Painel de TV**).
+
+Faça **nesta ordem**:
+1. **Site:** `git add .`, `git commit -m "Painel de TV"`, `git push`, e espere 2 minutos.
+2. **Banco:** rode o `supabase/schema.sql` inteiro no **SQL Editor**.
+3. **Edge Function** (só para poder criar novas contas de painel pelo site): em **Edge Functions → admin-usuarios → Code**, cole de novo o conteúdo de `supabase/functions/admin-usuarios/index.ts` e clique em **Deploy**.
+4. Em **Usuários**, troque o papel da conta desejada para **Painel de TV**. Se ela ainda tiver tarefas ou chamados em aberto, passe-os para outra pessoa antes.
+5. Na TV: entre com essa conta, clique em **Tela cheia** (aparece ao mexer o mouse) e deixe aberto.
+
 ### Relatório de pendências das 18h
 
 Ele usa a mesma propriedade `SUPABASE_SERVICE_KEY` do backup diário. Se o backup ainda não foi ligado, siga o passo 1 de "Backup diário" antes.

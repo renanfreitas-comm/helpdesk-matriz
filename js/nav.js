@@ -26,7 +26,8 @@ export const ICONES = {
   seta: '<path d="M9 6l6 6-6 6"/>',
   senha: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
   sair: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>',
-  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>'
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  tv: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M7 12l3-3 2 2 4-4"/>'
 };
 
 export function icone(nome, classe = "ico") {
@@ -43,7 +44,8 @@ const ITENS = [
   { href: "estoque.html", rotulo: "Estoque", icone: "estoque" },
   { secao: "Gestão", admin: true },
   { href: "supervisao.html", rotulo: "Supervisão", icone: "supervisao", admin: true },
-  { href: "usuarios.html", rotulo: "Usuários", icone: "usuarios", admin: true }
+  { href: "usuarios.html", rotulo: "Usuários", icone: "usuarios", admin: true },
+  { href: "painel.html", rotulo: "Painel de TV", icone: "tv", admin: true }
 ];
 
 /**

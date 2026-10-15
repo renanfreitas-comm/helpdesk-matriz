@@ -336,6 +336,8 @@ button, .botao {
 
 .badge-admin { background: #ede9fe; color: #6d28d9; }
 .badge-tecnico { background: #e0f2fe; color: #0369a1; }
+.badge-painel { background: #fef3c7; color: #92400e; }
+.sel-papel { width: auto; padding: 6px 8px; font-size: 13px; }
 
 .badge-prioridade-baixa { background: #dcfce7; color: var(--cor-baixa); }
 .badge-prioridade-media { background: #fef3c7; color: var(--cor-media); }
@@ -949,3 +951,179 @@ body.com-menu { padding-left: var(--largura-menu); }
 /* Coluna "Sessão" na tela Usuários */
 .sessao-celula { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .sessao-celula small { font-size: 12px; }
+
+/* ==========================================================================
+   PAINEL DE TAREFAS PARA TV (painel.html)
+   Fundo escuro, letras grandes e tudo visível de longe.
+   ========================================================================== */
+body.painel-tv {
+  --tv-fundo: #0b0f17;
+  --tv-card: #151b26;
+  --tv-card-2: #1c2431;
+  --tv-borda: #263041;
+  --tv-texto: #f3f4f6;
+  --tv-suave: #9aa4b2;
+  --tv-verde: #22c55e;
+  --tv-vermelho: #ef4444;
+  --tv-laranja: #f59e0b;
+  background: var(--tv-fundo);
+  color: var(--tv-texto);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: clamp(14px, 1.05vw, 22px);
+  cursor: none;
+}
+body.painel-tv.mostrando-controles { cursor: default; }
+
+.tv-topo {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 2.2em;
+  padding: 1.1em 1.6em;
+  background: #000;
+  border-bottom: 3px solid var(--cor-primaria);
+}
+.tv-marca { display: flex; align-items: center; gap: 1em; }
+.tv-marca img { height: 2.6em; }
+.tv-marca h1 { margin: 0; font-size: 1.7em; line-height: 1.1; }
+.tv-marca p { margin: .15em 0 0; color: var(--tv-suave); font-size: 1em; }
+
+.tv-progresso { display: flex; align-items: center; gap: .9em; }
+.tv-progresso strong { display: block; font-size: 1.15em; }
+.tv-progresso span { color: var(--tv-suave); }
+.tv-anel {
+  --p: 0;
+  width: 4.2em; height: 4.2em; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(var(--cor-primaria) calc(var(--p) * 1%), var(--tv-borda) 0);
+  position: relative;
+}
+.tv-anel::before { content: ""; position: absolute; inset: .45em; border-radius: 50%; background: #000; }
+.tv-anel span { position: relative; font-weight: 700; font-size: 1.05em; }
+
+.tv-numeros { display: flex; gap: 1em; justify-content: flex-end; }
+.tv-numero {
+  background: var(--tv-card); border: 1px solid var(--tv-borda); border-radius: 12px;
+  padding: .45em 1em; min-width: 7.5em; text-align: center;
+}
+.tv-numero strong { display: block; font-size: 1.9em; line-height: 1.1; }
+.tv-numero span { color: var(--tv-suave); font-size: .85em; }
+.tv-numero.alerta.ativo { background: rgba(239, 68, 68, .16); border-color: var(--tv-vermelho); }
+.tv-numero.alerta.ativo strong { color: var(--tv-vermelho); }
+
+.tv-relogio { text-align: right; }
+.tv-relogio strong { display: block; font-size: 2.6em; line-height: 1; font-variant-numeric: tabular-nums; }
+.tv-conexao { color: var(--tv-verde); font-size: .85em; }
+.tv-conexao::before { content: "● "; }
+.tv-conexao.offline { color: var(--tv-vermelho); }
+
+.tv-corpo {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 1fr minmax(16em, 22%);
+  gap: 1.2em; padding: 1.2em 1.6em;
+}
+.tv-equipe {
+  min-height: 0; overflow: hidden;
+  display: grid; gap: 1em; align-content: start;
+  grid-template-columns: repeat(var(--colunas, 3), minmax(0, 1fr));
+}
+.tv-equipe[data-colunas="1"] { --colunas: 1; }
+.tv-equipe[data-colunas="2"] { --colunas: 2; }
+.tv-equipe[data-colunas="3"] { --colunas: 3; }
+.tv-equipe[data-colunas="4"] { --colunas: 4; }
+.tv-vazio { color: var(--tv-suave); font-size: 1.3em; }
+
+.tv-card {
+  background: var(--tv-card); border: 1px solid var(--tv-borda);
+  border-top: 5px solid var(--cor-primaria);
+  border-radius: 14px; padding: 1em 1.1em;
+  display: flex; flex-direction: column; gap: .7em;
+}
+.tv-card.completo { border-top-color: var(--tv-verde); }
+.tv-card.com-atraso { border-top-color: var(--tv-vermelho); }
+.tv-card.sem-dono { border-top-color: var(--tv-laranja); background: var(--tv-card-2); }
+.tv-card-topo { display: flex; align-items: center; gap: .7em; }
+.tv-card-topo h3 { margin: 0; flex: 1; font-size: 1.3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-avatar {
+  width: 2.2em; height: 2.2em; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-weight: 700;
+  background: var(--cor-primaria); color: #111;
+}
+.tv-placar { font-size: 1.5em; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tv-card.completo .tv-placar { color: var(--tv-verde); }
+.tv-barra { height: .5em; background: var(--tv-borda); border-radius: 99px; overflow: hidden; }
+.tv-barra div { height: 100%; background: var(--cor-primaria); border-radius: 99px; transition: width .6s ease; }
+.tv-card.completo .tv-barra div { background: var(--tv-verde); }
+
+.tv-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35em; }
+.tv-tarefa { display: flex; align-items: flex-start; gap: .55em; font-size: 1.05em; line-height: 1.3; }
+.tv-caixa {
+  width: 1.05em; height: 1.05em; flex: none; margin-top: .15em;
+  border: 2px solid var(--tv-suave); border-radius: 4px;
+  display: grid; place-items: center; font-size: .8em; font-weight: 700;
+}
+.tv-tarefa.feita { color: var(--tv-suave); font-size: .92em; }
+.tv-tarefa.feita .tv-tarefa-titulo { text-decoration: line-through; }
+.tv-tarefa.feita .tv-caixa { background: var(--tv-verde); border-color: var(--tv-verde); color: #04130a; }
+.tv-tudo-feito { margin: 0; color: var(--tv-verde); font-weight: 700; font-size: 1.1em; }
+.tv-nada { margin: 0; color: var(--tv-suave); }
+
+.tv-chamados { border-top: 1px dashed var(--tv-borda); padding-top: .6em; }
+.tv-chamados h4 { margin: 0 0 .4em; font-size: .85em; text-transform: uppercase; letter-spacing: .06em; color: var(--tv-suave); }
+.tv-chamados ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4em; }
+.tv-chamado {
+  display: grid; grid-template-columns: auto 1fr; gap: .1em .55em; align-items: center;
+  background: var(--tv-card-2); border-radius: 8px; padding: .4em .6em;
+  border-left: 4px solid transparent;
+}
+.tv-card.sem-dono .tv-chamado { background: var(--tv-card); }
+.tv-chamado-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-prazo { grid-column: 2; font-size: .82em; color: var(--tv-suave); }
+.tv-chamado.prazo-perto { border-left-color: var(--tv-laranja); }
+.tv-chamado.prazo-perto .tv-prazo { color: var(--tv-laranja); }
+.tv-chamado.prazo-atrasado { border-left-color: var(--tv-vermelho); background: rgba(239, 68, 68, .14); }
+.tv-chamado.prazo-atrasado .tv-prazo { color: #fca5a5; font-weight: 700; }
+.tv-prio { width: .7em; height: .7em; border-radius: 50%; background: var(--tv-suave); }
+.tv-prio.prio-alta { background: var(--tv-vermelho); }
+.tv-prio.prio-media { background: var(--tv-laranja); }
+.tv-prio.prio-baixa { background: var(--tv-verde); }
+
+.tv-lateral {
+  min-height: 0; overflow: hidden;
+  background: var(--tv-card); border: 1px solid var(--tv-borda); border-radius: 14px;
+  padding: 1em 1.1em; display: flex; flex-direction: column;
+}
+.tv-lateral h2 { margin: 0 0 .7em; font-size: 1.15em; }
+.tv-feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55em; overflow: hidden; }
+.tv-feed-item { display: flex; gap: .7em; align-items: flex-start; padding-bottom: .55em; border-bottom: 1px solid var(--tv-borda); }
+.tv-feed-hora { color: var(--cor-primaria); font-weight: 700; font-variant-numeric: tabular-nums; min-width: 3em; }
+.tv-feed-texto { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-width: 0; text-align: left; }
+.tv-feed-texto strong { max-width: 100%; }
+.tv-feed-texto strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-feed-texto small { color: var(--tv-suave); font-size: .85em; }
+.tv-feed-item.chamado strong::before { content: "✓ "; color: var(--tv-verde); }
+.tv-feed-vazio { color: var(--tv-suave); }
+
+.tv-controles {
+  position: fixed; right: 1.2em; bottom: 1.2em; display: flex; gap: .6em;
+  opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+body.mostrando-controles .tv-controles { opacity: 1; pointer-events: auto; }
+.tv-controles button {
+  background: var(--tv-card-2); color: var(--tv-texto); border: 1px solid var(--tv-borda);
+  border-radius: 8px; padding: .5em 1em; font: inherit; font-size: .9em; cursor: pointer;
+}
+.tv-controles button:hover { border-color: var(--cor-primaria); }
+
+/* Telas menores (monitor comum ou notebook) */
+@media (max-width: 1100px) {
+  body.painel-tv { overflow: auto; height: auto; font-size: 15px; cursor: default; }
+  .tv-topo { grid-template-columns: 1fr auto; gap: 1em; }
+  .tv-numeros { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; }
+  .tv-corpo { grid-template-columns: 1fr; }
+  .tv-equipe { --colunas: 1 !important; grid-template-columns: 1fr; overflow: visible; }
+  .tv-controles { opacity: 1; pointer-events: auto; }
+}
