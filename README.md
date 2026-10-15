@@ -23,6 +23,7 @@ helpdesk-matriz/
 │   ├── supabase-config.js   # URL e chave pública do Supabase (você vai editar)
 │   ├── db.js                # acesso ao banco, compartilhado pelas telas
 │   ├── auth.js              # login, proteção de páginas, funções de admin
+│   ├── sessao.js            # uma máquina por vez (sinal de vida, inatividade)
 │   ├── sla.js               # prazos por prioridade (edite aqui para mudar)
 │   ├── acoes-chamado.js     # botões rápidos Assumir / Iniciar / Resolver
 │   ├── tarefas-util.js      # regra de repetição das tarefas (igual à do banco)
@@ -43,6 +44,17 @@ helpdesk-matriz/
 - **Estoque**: controle dos equipamentos que passam pela TI (chegada, configuração e saída), no mesmo formato da planilha usada pela equipe — cada item registra equipamento, S/N, ativo, data de chegada, delegação, prioridade, data de saída, técnico responsável, loja/setor e situação (Recebido, Em configuração, Aguardando peça, Concluído ou Entregue). Não há controle de quantidade/estoque mínimo nesta versão — é um registro individual por equipamento.
 - **Usuários** (somente admin): não existe cadastro público — só um admin cria novas contas por aqui (nome, e-mail, senha temporária e papel), além de promover/rebaixar técnicos e admins.
 - **Supervisão** (somente admin): visão consolidada dos relatórios diários de todo o time (com a mesma tabela de atividades), filtrável por técnico e por período, com um resumo de produtividade (chamados resolvidos + relatórios enviados) por pessoa.
+
+### Uma máquina por vez (controle de sessão)
+
+- Cada conta só fica conectada em **um computador por vez**. Enquanto a conta estiver ativa num PC, um login em outro PC é **recusado**, com a mensagem de onde ela está aberta (ex.: "Chrome no Windows, conectada desde 08:12").
+- Abas do mesmo navegador contam como a mesma máquina. Um navegador diferente no mesmo PC conta como outra máquina.
+- **Como a vaga é liberada:**
+  - clicando em **Sair** naquele computador;
+  - um **admin** clicando em **Desconectar** na tela Usuários (coluna **Sessão**, que mostra quem está online e em qual máquina);
+  - **sozinha, 2 minutos** depois que o navegador de lá for fechado ou o PC desligado (o site manda um "sinal de vida" a cada 30 s);
+  - por **inatividade**: depois de 60 minutos sem mexer no site, a sessão é encerrada. Para mudar, altere `MINUTOS_INATIVIDADE` em `js/sessao.js`, ou ponha `0` para desligar.
+- A regra vale **no banco**, e não só na tela: uma sessão que não é a registrada não lê nem grava nada, mesmo chamando a API direto.
 
 ### Tela inicial e menu lateral
 
@@ -238,6 +250,14 @@ Quando não precisar mais do Firebase, você pode excluir o projeto inteiro em *
 ### Outubro/2026 — tela inicial e menu lateral
 
 Só arquivos do site, sem mudança no banco: copie os arquivos para a pasta do repositório e faça `git add .`, `git commit -m "Nova tela inicial e menu lateral"` e `git push`.
+
+### Outubro/2026 — controle de sessão (uma máquina por vez)
+
+Faça **nesta ordem**:
+1. **Primeiro o site:** copie os arquivos, `git add .`, `git commit -m "Controle de sessão"`, `git push`, e espere 2 minutos.
+2. **Depois o banco:** rode o `supabase/schema.sql` inteiro no **SQL Editor**.
+
+Se o banco for atualizado antes do site, quem estiver com a versão antiga aberta perde o acesso aos dados até recarregar a página. Depois do passo 2, cada pessoa precisa recarregar o site (Ctrl+F5) uma vez.
 
 ### Relatório de pendências das 18h
 

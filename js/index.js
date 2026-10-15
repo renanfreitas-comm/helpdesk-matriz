@@ -9,8 +9,24 @@ supabase.auth.getSession().then(({ data: { session } }) => {
   if (session) window.location.href = "dashboard.html";
 });
 
+// ---------- Por que a pessoa voltou para o login ----------
+(() => {
+  const motivo = new URLSearchParams(window.location.search).get("motivo");
+  if (!motivo) return;
+  const textos = {
+    "outra-maquina": sessionStorage.getItem("hd-em-uso") || "Esta conta está em uso em outra máquina.",
+    "desconectado": "Sua sessão foi encerrada: um admin desconectou você, ou a conta foi acessada em outra máquina depois que esta ficou sem conexão.",
+    "inatividade": "Sua sessão foi encerrada por inatividade. Entre novamente."
+  };
+  sessionStorage.removeItem("hd-em-uso");
+  const el = document.getElementById("login-erro");
+  if (el && textos[motivo]) el.textContent = textos[motivo];
+  history.replaceState(null, "", window.location.pathname);
+})();
+
 // ---------- Mensagens de erro traduzidas ----------
 function traduzirErro(err) {
+  if (err && err.code === "em_uso") return err.message;
   const codigo = (err && (err.code || err.message)) || "";
   if (/invalid_credentials|Invalid login credentials/i.test(codigo)) return "E-mail ou senha incorretos.";
   if (/email_not_confirmed|Email not confirmed/i.test(codigo)) return "E-mail ainda não confirmado. Peça ao admin para verificar sua conta.";

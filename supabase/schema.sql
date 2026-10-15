@@ -24,6 +24,9 @@
 --     relatorio_pendencias(), usada pelo e-mail automático das 18h.
 --   * O "bucket" privado "laudos" (Storage) para os laudos das visitas.
 --   * A publicação Realtime, para as telas se atualizarem sozinhas.
+--   * Controle de sessão (sessoes_ativas): cada conta só fica conectada em
+--     UMA máquina por vez. Enquanto ela estiver ativa num computador, outro
+--     computador não entra. Só a sessão registrada lê/grava dados.
 -- ==========================================================================
 
 -- --------------------------------------------------------------- USUÁRIOS
@@ -35,17 +38,119 @@ create table if not exists public.usuarios (
   criado_em  timestamptz not null default now()
 );
 
+-- ------------------------------------------------- SESSÃO: UMA MÁQUINA POR VEZ
+-- Uma linha por pessoa conectada: em qual máquina (navegador) está, qual
+-- sessão do login (session_id do Supabase Auth) e o último "sinal de vida"
+-- (o site manda um a cada 30 s). Sem sinal por 2 minutos (navegador
+-- fechado, PC desligado), a vaga é liberada para outra máquina.
+create table if not exists public.sessoes_ativas (
+  usuario_id       uuid primary key references public.usuarios (id) on delete cascade,
+  dispositivo_id   text not null check (char_length(dispositivo_id) between 8 and 100),
+  dispositivo_nome text not null default '' check (char_length(dispositivo_nome) <= 120),
+  sessao_auth      text,
+  iniciada_em      timestamptz not null default now(),
+  ultimo_sinal     timestamptz not null default now()
+);
+
+-- A requisição atual vem da sessão registrada para esta pessoa?
+-- (Se o token não trouxer session_id, não bloqueia — evita trancar todos.)
+create or replace function public.sessao_atual_valida()
+returns boolean language sql stable security definer set search_path = public as $$
+  select case
+    when coalesce(auth.jwt() ->> 'session_id', '') = '' then true
+    else exists (select 1 from public.sessoes_ativas s
+                 where s.usuario_id = auth.uid()
+                   and s.sessao_auth = auth.jwt() ->> 'session_id')
+  end;
+$$;
+
 -- Funções auxiliares usadas nas regras (security definer = enxergam a
 -- tabela usuarios mesmo com RLS ligado, sem causar recursão).
+-- "Membro" = tem perfil E está usando a sessão registrada (uma máquina só).
 create or replace function public.eh_membro()
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.usuarios where id = auth.uid());
+  select exists (select 1 from public.usuarios where id = auth.uid())
+     and public.sessao_atual_valida();
 $$;
 
 create or replace function public.eh_admin()
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.usuarios where id = auth.uid() and papel = 'admin');
+  select exists (select 1 from public.usuarios where id = auth.uid() and papel = 'admin')
+     and public.sessao_atual_valida();
 $$;
+
+-- Ocupa a vaga de sessão desta conta para este navegador. Recusa se outra
+-- máquina estiver ativa (sinal nos últimos 2 minutos).
+create or replace function public.reivindicar_sessao(p_dispositivo text, p_nome text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  atual public.sessoes_ativas;
+  sid text := nullif(auth.jwt() ->> 'session_id', '');
+begin
+  if auth.uid() is null or not exists (select 1 from public.usuarios where id = auth.uid()) then
+    return jsonb_build_object('ok', false, 'motivo', 'sem_perfil');
+  end if;
+  if coalesce(char_length(p_dispositivo), 0) not between 8 and 100 then
+    return jsonb_build_object('ok', false, 'motivo', 'dispositivo_invalido');
+  end if;
+
+  select * into atual from public.sessoes_ativas where usuario_id = auth.uid() for update;
+  if found and atual.dispositivo_id <> p_dispositivo
+     and atual.ultimo_sinal > now() - interval '2 minutes' then
+    return jsonb_build_object('ok', false, 'motivo', 'em_uso',
+      'dispositivo', atual.dispositivo_nome, 'desde', atual.iniciada_em, 'ultimo_sinal', atual.ultimo_sinal);
+  end if;
+
+  insert into public.sessoes_ativas (usuario_id, dispositivo_id, dispositivo_nome, sessao_auth, iniciada_em, ultimo_sinal)
+  values (auth.uid(), p_dispositivo, left(coalesce(p_nome, ''), 120), sid, now(), now())
+  on conflict (usuario_id) do update set
+    iniciada_em = case when public.sessoes_ativas.dispositivo_id = excluded.dispositivo_id
+                       then public.sessoes_ativas.iniciada_em else now() end,
+    dispositivo_id = excluded.dispositivo_id,
+    dispositivo_nome = excluded.dispositivo_nome,
+    sessao_auth = excluded.sessao_auth,
+    ultimo_sinal = now();
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- "Sinal de vida" a cada 30 s. Devolve false se esta máquina perdeu a vaga
+-- (admin desconectou, ou outra máquina entrou depois de ela ficar sem sinal).
+create or replace function public.sinal_sessao(p_dispositivo text)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update public.sessoes_ativas set ultimo_sinal = now()
+   where usuario_id = auth.uid() and dispositivo_id = p_dispositivo
+     and sessao_auth is not distinct from nullif(auth.jwt() ->> 'session_id', '');
+  return found;
+end $$;
+
+-- Ao clicar em "Sair": libera a vaga na hora.
+create or replace function public.encerrar_sessao(p_dispositivo text)
+returns void language sql security definer set search_path = public as $$
+  delete from public.sessoes_ativas where usuario_id = auth.uid() and dispositivo_id = p_dispositivo;
+$$;
+
+-- Admin desconecta alguém (ex.: esqueceu o PC ligado e precisa entrar em outro).
+create or replace function public.derrubar_sessao(p_usuario uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.eh_admin() then
+    raise exception 'Apenas o supervisor/admin pode desconectar sessões.' using errcode = '42501';
+  end if;
+  if p_usuario = auth.uid() then
+    raise exception 'Para encerrar a sua própria sessão, use "Sair".';
+  end if;
+  delete from public.sessoes_ativas where usuario_id = p_usuario;
+end $$;
+
+revoke execute on function public.reivindicar_sessao(text, text) from public, anon;
+revoke execute on function public.sinal_sessao(text) from public, anon;
+revoke execute on function public.encerrar_sessao(text) from public, anon;
+revoke execute on function public.derrubar_sessao(uuid) from public, anon;
+grant execute on function public.reivindicar_sessao(text, text) to authenticated;
+grant execute on function public.sinal_sessao(text) to authenticated;
+grant execute on function public.encerrar_sessao(text) to authenticated;
+grant execute on function public.derrubar_sessao(uuid) to authenticated;
 
 create or replace function public.meu_nome()
 returns text language sql stable security definer set search_path = public as $$
@@ -561,6 +666,7 @@ grant execute on function public.relatorio_pendencias(date) to service_role;
 
 -- ===================================================== REGRAS DE ACESSO (RLS)
 alter table public.usuarios          enable row level security;
+alter table public.sessoes_ativas    enable row level security;
 alter table public.chamados          enable row level security;
 alter table public.chamado_eventos   enable row level security;
 alter table public.relatorios        enable row level security;
@@ -588,6 +694,11 @@ end $$;
 -- pela função "admin-usuarios" (Edge Function), nunca direto do site.
 create policy usuarios_ler on public.usuarios for select to authenticated
   using (id = auth.uid() or (select public.eh_membro()));
+-- sessoes_ativas: cada um vê a própria; admin vê todas (painel de sessões).
+-- Gravações só pelas funções reivindicar/sinal/encerrar/derrubar_sessao.
+create policy sessoes_ler on public.sessoes_ativas for select to authenticated
+  using (usuario_id = auth.uid() or (select public.eh_admin()));
+
 create policy usuarios_editar on public.usuarios for update to authenticated
   using ((select public.eh_admin())) with check ((select public.eh_admin()));
 
@@ -714,7 +825,7 @@ create policy laudos_excluir on storage.objects for delete to authenticated
 do $$
 declare t text;
 begin
-  foreach t in array array['usuarios', 'chamados', 'chamado_eventos', 'tarefas', 'tarefa_conclusoes',
+  foreach t in array array['usuarios', 'sessoes_ativas', 'chamados', 'chamado_eventos', 'tarefas', 'tarefa_conclusoes',
                            'relatorios', 'maquinas',
                            'maquina_historico', 'itens_estoque', 'visitas'] loop
     if not exists (

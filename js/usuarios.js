@@ -3,10 +3,11 @@
 // ==========================================================================
 import { protegerPagina, criarUsuarioComoAdmin, excluirUsuarioComoAdmin, definirSenhaComoAdmin } from "./auth.js";
 import { montarNav } from "./nav.js";
-import { atualizar, observar } from "./db.js";
+import { atualizar, observar, supabase } from "./db.js";
 
 let usuarioLogadoUid = null;
 let listaUsuarios = [];
+let sessoes = {};          // usuario_id -> sessão ativa (uma máquina por vez)
 
 const tabelaBody = document.getElementById("tabela-usuarios");
 const modal = document.getElementById("modal-usuario");
@@ -16,11 +17,19 @@ protegerPagina((user, perfil) => {
   usuarioLogadoUid = user.uid;
   montarNav(perfil, user);
 
+  // Quem está conectado e em qual máquina (atualiza sozinho).
+  observar("sessoes_ativas", (q) => q, (linhas) => {
+    sessoes = Object.fromEntries(linhas.map((s) => [s.usuarioId, s]));
+    renderizarTabela();
+  });
+  // "Online há x min" muda com o tempo.
+  setInterval(renderizarTabela, 30000);
+
   observar("usuarios", (q) => q.order("nome"), (linhas) => {
     listaUsuarios = linhas.map((u) => ({ uid: u.id, ...u }));
     renderizarTabela();
   }, (erro) => {
-    tabelaBody.innerHTML = `<tr><td colspan="4" class="vazio">Erro ao carregar usuários: ${escaparHTML(erro.message)}</td></tr>`;
+    tabelaBody.innerHTML = `<tr><td colspan="5" class="vazio">Erro ao carregar usuários: ${escaparHTML(erro.message)}</td></tr>`;
   });
 }, { apenasAdmin: true });
 
@@ -79,7 +88,7 @@ function traduzirErroCadastro(err) {
 
 function renderizarTabela() {
   if (listaUsuarios.length === 0) {
-    tabelaBody.innerHTML = `<tr><td colspan="4" class="vazio">Nenhum usuário encontrado.</td></tr>`;
+    tabelaBody.innerHTML = `<tr><td colspan="5" class="vazio">Nenhum usuário encontrado.</td></tr>`;
     return;
   }
 
@@ -117,6 +126,7 @@ function renderizarTabela() {
         <td>${escaparHTML(u.nome)}${ehVoce ? ' <span class="texto-suave">(você)</span>' : ""}</td>
         <td>${escaparHTML(u.email)}</td>
         <td><span class="badge ${classePapel}">${rotuloPapel}</span></td>
+        <td>${celulaSessao(u, ehVoce)}</td>
         <td>${acao}</td>
       </tr>`;
   }).join("");
@@ -129,6 +139,8 @@ function renderizarTabela() {
     b.addEventListener("click", () => excluirUsuario(b.dataset.id)));
   document.querySelectorAll(".btn-nova-senha").forEach((b) =>
     b.addEventListener("click", () => novaSenha(b.dataset.id)));
+  document.querySelectorAll(".btn-desconectar").forEach((b) =>
+    b.addEventListener("click", () => desconectar(b.dataset.id)));
 }
 
 async function alterarPapel(uid, novoPapel) {
@@ -177,6 +189,31 @@ async function novaSenha(uid) {
   } catch (err) {
     alert("Erro ao trocar a senha: " + err.message);
   }
+}
+
+// -------------------- Sessões (uma máquina por vez) --------------------
+const LIMITE_ONLINE_MS = 2 * 60 * 1000; // mesmo prazo do banco
+
+function celulaSessao(u, ehVoce) {
+  const s = sessoes[u.uid];
+  if (!s) return '<span class="texto-suave">Desconectado</span>';
+  const online = Date.now() - new Date(s.ultimoSinal) < LIMITE_ONLINE_MS;
+  const desde = new Date(s.iniciadaEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return `
+    <div class="sessao-celula">
+      <span class="badge ${online ? "badge-status-resolvido" : ""}">${online ? "● Online" : "Sem sinal"}</span>
+      <small class="texto-suave">${escaparHTML(s.dispositivoNome || "Máquina desconhecida")} · desde ${desde}</small>
+      ${!ehVoce ? `<button class="botao-secundario botao-pequeno btn-desconectar" data-id="${u.uid}">Desconectar</button>` : ""}
+    </div>`;
+}
+
+async function desconectar(uid) {
+  const u = listaUsuarios.find((x) => x.uid === uid);
+  if (!confirm(`Desconectar ${u ? u.nome : "este usuário"}?\n\nA sessão dele termina na hora e ele poderá entrar em outra máquina.`)) return;
+  const { error } = await supabase.rpc("derrubar_sessao", { p_usuario: uid });
+  if (error) { alert("Erro ao desconectar: " + error.message); return; }
+  delete sessoes[uid];
+  renderizarTabela();
 }
 
 function escaparHTML(texto) {

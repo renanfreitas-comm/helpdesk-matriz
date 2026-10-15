@@ -3,6 +3,7 @@
 // ==========================================================================
 import { supabase } from "./supabase-config.js";
 import { mensagemErro } from "./db.js";
+import { reivindicarSessao, liberarSessao, mensagemEmUso, iniciarMonitorSessao } from "./sessao.js";
 
 /**
  * Chama a Edge Function "admin-usuarios" (só admins). Ela usa a chave de
@@ -48,16 +49,43 @@ export async function redefinirSenha(email) {
   if (error) throw error;
 }
 
-/** Efetua login com e-mail e senha. */
+/**
+ * Efetua login com e-mail e senha e ocupa a vaga de sessão desta máquina.
+ * Se a conta estiver ativa em outra máquina, desfaz o login e lança um
+ * erro com code "em_uso".
+ */
 export async function entrar(email, senha) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
   if (error) throw error;
+
+  let r;
+  try {
+    r = await reivindicarSessao();
+  } catch (err) {
+    await supabase.auth.signOut({ scope: "local" });
+    throw err;
+  }
+  if (!r.ok) {
+    // "local": desfaz só o login deste navegador, sem afetar a outra máquina.
+    await supabase.auth.signOut({ scope: "local" });
+    const e = new Error(r.motivo === "em_uso" ? mensagemEmUso(r) : "Não foi possível iniciar a sessão.");
+    e.code = r.motivo || "erro_sessao";
+    throw e;
+  }
   return data;
 }
 
-/** Encerra a sessão do usuário atual. */
+/** Encerra a sessão deste navegador e libera a vaga para outra máquina. */
 export async function sair() {
-  await supabase.auth.signOut();
+  await liberarSessao();
+  await supabase.auth.signOut({ scope: "local" });
+}
+
+/** Sai e volta para o login explicando o motivo. */
+async function sairComMotivo(motivo) {
+  if (motivo !== "outra-maquina" && motivo !== "desconectado") await liberarSessao();
+  await supabase.auth.signOut({ scope: "local" });
+  window.location.href = "index.html?motivo=" + encodeURIComponent(motivo);
 }
 
 /** Busca o perfil (nome/papel) de um usuário pelo id. */
@@ -95,6 +123,21 @@ export async function protegerPagina(callback, opcoes = {}) {
     window.location.href = "index.html";
     return;
   }
+
+  // Uma máquina por vez: confirma que esta máquina ainda tem a vaga.
+  let vaga;
+  try {
+    vaga = await reivindicarSessao();
+  } catch (err) {
+    console.error("Erro ao verificar a sessão:", err);
+    vaga = { ok: true }; // falha de rede pontual: as regras do banco seguem protegendo os dados
+  }
+  if (!vaga.ok) {
+    if (vaga.motivo === "em_uso") sessionStorage.setItem("hd-em-uso", mensagemEmUso(vaga));
+    await sairComMotivo("outra-maquina");
+    return;
+  }
+  if (!vaga.semControle) iniciarMonitorSessao((motivo) => sairComMotivo(motivo));
 
   if (opcoes.apenasAdmin && perfil.papel !== "admin") {
     alert("Apenas o supervisor/admin pode acessar esta página.");
