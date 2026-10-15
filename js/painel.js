@@ -88,7 +88,8 @@ function renderizar() {
   const doDia = tarefas.filter((t) => valeNoDia(t, hoje));
   const agora = new Date();
 
-  // Uma coluna por pessoa: técnicos sempre; admins só se tiverem algo hoje.
+  // Um card por pessoa, só para quem tem tarefa para hoje. Quem está sem
+  // tarefas atribuídas fica oculto (mesmo que tenha chamados em aberto).
   const pessoas = usuarios.map((u) => {
     const minhas = doDia.filter((t) => t.responsavelUid === u.id);
     const chamados = chamadosAbertos.filter((c) => c.responsavelUid === u.id);
@@ -98,7 +99,7 @@ function renderizar() {
       concluidas: minhas.filter((t) => feitas.has(String(t.id))),
       total: minhas.length
     };
-  }).filter((p) => p.u.papel === "tecnico" || p.total > 0 || p.chamados.length > 0);
+  }).filter((p) => p.total > 0);
 
   // Topo: números gerais
   const total = pessoas.reduce((s, p) => s + p.total, 0);
@@ -119,7 +120,7 @@ function renderizar() {
   const semDono = chamadosAbertos.filter((c) => !c.responsavelUid);
   const cards = pessoas.map((p) => cardPessoa(p, agora));
   if (semDono.length) cards.push(cardSemResponsavel(semDono, agora));
-  el("tv-equipe").innerHTML = cards.join("") || `<p class="tv-vazio">Nenhum técnico cadastrado.</p>`;
+  el("tv-equipe").innerHTML = cards.join("") || `<p class="tv-vazio">Nenhuma tarefa atribuída para hoje.</p>`;
   el("tv-equipe").dataset.colunas = String(Math.min(Math.max(cards.length, 1), 4));
 
   renderizarFeed();
