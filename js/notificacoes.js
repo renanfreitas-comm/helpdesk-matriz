@@ -15,7 +15,7 @@ import { situacaoPrazo } from "./sla.js";
 const ICONE_TIPO = {
   atribuicao: ["👤", "amarelo"], mencao: ["💬", "azul"], comentario: ["💬", "azul"],
   resolvido: ["✓", "verde"], tarefa: ["☑", "roxo"], novo_chamado: ["🔔", "laranja"],
-  prazo: ["⏰", "vermelho"]
+  prazo: ["⏰", "vermelho"], seguranca: ["🛡", "vermelho"]
 };
 
 let uid = null;

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Integrações — Help Desk Matriz</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="com-menu">
+
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <main class="app-main">
+    <div class="topo-pagina">
+      <div>
+        <h1>Integração com o Qualitor</h1>
+        <p class="texto-suave subtitulo-pagina">O site como "cara" do Qualitor: o que é aberto, anotado e resolvido aqui vai para lá; o que chega na fila da equipe lá aparece aqui.</p>
+      </div>
+    </div>
+
+    <!-- Situação -->
+    <section class="card integ-status" id="integ-status">
+      <div class="integ-status-linha">
+        <span class="integ-luz" id="integ-luz"></span>
+        <div>
+          <strong id="integ-titulo">Carregando...</strong>
+          <small class="texto-suave" id="integ-detalhe"></small>
+        </div>
+        <label class="alternar integ-ligar"><input type="checkbox" id="integ-ativo"> Integração ligada</label>
+      </div>
+      <div class="integ-numeros" id="integ-numeros"></div>
+      <div class="acoes-tabela">
+        <button type="button" class="botao-secundario" id="btn-testar">Testar conexão</button>
+        <button type="button" class="botao-primario" id="btn-sincronizar">Sincronizar agora</button>
+      </div>
+      <pre class="integ-saida" id="integ-saida" hidden></pre>
+    </section>
+
+    <!-- Segurança -->
+    <section class="card integ-seguranca" id="integ-seguranca">
+      <div class="integ-seg-topo">
+        <h2>Verificação de segurança</h2>
+        <span class="badge" id="seg-resumo"></span>
+      </div>
+      <ul class="integ-checklist" id="seg-lista"></ul>
+      <div class="integ-modo" id="integ-modo">
+        <div>
+          <strong id="modo-titulo">Modo validação: só leitura</strong>
+          <small class="texto-suave" id="modo-detalhe">O site lê e mostra os chamados da equipe, mas não abre, não anota e não encerra nada no Qualitor.</small>
+        </div>
+        <div class="integ-modo-acao" id="modo-acao"></div>
+      </div>
+      <div class="acoes-tabela">
+        <button type="button" class="botao-secundario" id="btn-trocar-segredo">Gerar novo segredo interno</button>
+      </div>
+    </section>
+
+    <!-- Passo a passo -->
+    <details class="card integ-passos" id="integ-passos">
+      <summary><strong>Como ligar (uma vez)</strong></summary>
+      <ol>
+        <li>Peça à Vantix/Qualitor um <strong>usuário de integração</strong> com acesso aos WebServices (abrir, acompanhar, encerrar e consultar chamados) e o <strong>código da empresa</strong>.</li>
+        <li>No Supabase: <strong>Edge Functions → Deploy a new function → Via Editor</strong>, nome <code>qualitor</code>, cole o arquivo <code>supabase/functions/qualitor/index.ts</code> e publique. Em <em>Settings</em> da função, <strong>desligue "Verify JWT"</strong>.</li>
+        <li>Na função, em <strong>Secrets</strong>, crie <code>QUALITOR_LOGIN</code>, <code>QUALITOR_SENHA</code> e <code>QUALITOR_EMPRESA</code>. Opcional: <code>QUALITOR_HOSTS</code> com o(s) servidor(es) para onde a senha pode ir (padrão: <code>portal.vantix.com.br</code> e <code>qualitor.vantix.com.br</code>).</li>
+        <li>Aqui embaixo, confira o endereço do webservice, preencha os <strong>códigos</strong> (cliente, contato, categoria, tipo e equipe), o <strong>escopo</strong> (a equipe Matriz da TI) e salve.</li>
+        <li>Clique em <strong>Testar conexão</strong>. Use <strong>Explorar campos</strong> para ver como seu Qualitor devolve um chamado e ajustar os modelos, se precisar.</li>
+        <li>Ligue a integração: ela começa em <strong>modo validação</strong> (só leitura). Quando os Secrets estiverem com um usuário de integração dedicado, libere a escrita em "Verificação de segurança". A partir daí cada chamado novo vai na hora e a sincronização roda a cada 5 minutos.</li>
+      </ol>
+    </details>
+
+    <!-- Configuração -->
+    <form class="card modal-form integ-form" id="form-integ">
+      <h2>Configuração</h2>
+      <div class="linha-dupla">
+        <div class="campo">
+          <label for="cfg-url-ws">Endereço do webservice (WSTicket)</label>
+          <input type="url" id="cfg-url-ws" required />
+        </div>
+        <div class="campo">
+          <label for="cfg-url-chamado">Link para abrir um chamado no Qualitor <span class="texto-suave">(use {{numero}})</span></label>
+          <input type="text" id="cfg-url-chamado" placeholder="Abra um chamado no Qualitor, copie o endereço e troque o número por {{numero}}" />
+        </div>
+      </div>
+      <div class="campo">
+        <label for="cfg-funcao-url">Endereço da Edge Function</label>
+        <div class="portal-link-linha">
+          <input type="url" id="cfg-funcao-url" placeholder="https://<projeto>.supabase.co/functions/v1/qualitor" />
+          <button type="button" class="botao-secundario" id="btn-funcao-padrao">Usar o padrão</button>
+        </div>
+      </div>
+
+      <h3 class="integ-sub">Códigos do seu Qualitor</h3>
+      <div class="integ-codigos" id="cfg-codigos"></div>
+
+      <h3 class="integ-sub">Escopo: o que a aplicação pode ver no Qualitor</h3>
+      <p class="texto-suave integ-escopo-ajuda">Mesmo usando um usuário que enxerga mais coisas no Qualitor, o site só lê e mostra chamados destas equipes. O resto é descartado na própria função, antes de chegar ao banco. Sem equipe aqui, nenhum chamado é lido.</p>
+      <div class="linha-dupla">
+        <div class="campo">
+          <label for="cfg-escopo-equipes">Equipes permitidas <span class="texto-suave">(código ou nome exato, separados por vírgula)</span></label>
+          <input type="text" id="cfg-escopo-equipes" placeholder="Ex.: 12, Time Matriz" />
+        </div>
+        <div class="campo">
+          <label for="cfg-escopo-locais">Só de solicitantes de <span class="texto-suave">(opcional)</span></label>
+          <input type="text" id="cfg-escopo-locais" placeholder="Ex.: Backoffice" />
+        </div>
+      </div>
+
+      <div class="integ-opcoes">
+        <label class="alternar"><input type="checkbox" id="cfg-importar"> Trazer chamados da fila da equipe</label>
+        <label class="alternar"><input type="checkbox" id="cfg-anotacoes"> Anotações do site viram acompanhamento</label>
+        <label class="alternar"><input type="checkbox" id="cfg-encerrar"> Resolver no site encerra no Qualitor</label>
+        <label class="alternar"><input type="checkbox" id="cfg-acoes"> Assumir, iniciar, mudar prioridade e reabrir no site também valem no Qualitor</label>
+        <label class="alternar"><input type="checkbox" id="cfg-portal-triagem"> Chamado do portal só vai ao Qualitor depois que um técnico assumir</label>
+      </div>
+
+      <details class="integ-avancado">
+        <summary>Avançado: modelos XML e mapas</summary>
+        <p class="texto-suave" style="font-size:12.5px">Variáveis: {{titulo}}, {{descricao}}, {{numero_site}}, {{area}}, {{prioridade}}, {{severidade}}, {{solicitante}}, {{contato}}, {{autor}}, {{cdchamado}}, {{texto}} e os códigos acima ({{cdcliente}}, {{cdcategoria}}...).</p>
+        <div class="campo"><label for="cfg-xml-abertura">Abrir chamado (addTicketByData)</label><textarea id="cfg-xml-abertura" rows="9" class="mono"></textarea></div>
+        <div class="campo"><label for="cfg-xml-acomp">Acompanhamento (addTicketHistory)</label><textarea id="cfg-xml-acomp" rows="6" class="mono"></textarea></div>
+        <div class="campo"><label for="cfg-xml-encerrar">Encerrar (closeTicket)</label><textarea id="cfg-xml-encerrar" rows="5" class="mono"></textarea></div>
+        <div class="linha-dupla">
+          <div class="campo"><label for="cfg-xml-atribuir">Atribuir responsável (transferTicketResponsible)</label><textarea id="cfg-xml-atribuir" rows="5" class="mono"></textarea></div>
+          <div class="campo"><label for="cfg-xml-iniciar">Iniciar atendimento (startTicket)</label><textarea id="cfg-xml-iniciar" rows="5" class="mono"></textarea></div>
+        </div>
+        <div class="linha-dupla">
+          <div class="campo"><label for="cfg-xml-prioridade">Mudar prioridade (changeTicketSeverity)</label><textarea id="cfg-xml-prioridade" rows="5" class="mono"></textarea></div>
+          <div class="campo"><label for="cfg-xml-reabrir">Reabrir (reopenTicket)</label><textarea id="cfg-xml-reabrir" rows="5" class="mono"></textarea></div>
+        </div>
+        <div class="campo"><label for="cfg-xml-consulta">Consultar um chamado (getTicketData)</label><textarea id="cfg-xml-consulta" rows="4" class="mono"></textarea></div>
+        <div class="campo"><label for="cfg-xml-busca">Buscar a fila da equipe (getTicketsData)</label><textarea id="cfg-xml-busca" rows="5" class="mono"></textarea></div>
+        <div class="linha-dupla">
+          <div class="campo"><label for="cfg-mapa-prioridade">Prioridade → severidade (JSON)</label><textarea id="cfg-mapa-prioridade" rows="3" class="mono"></textarea></div>
+          <div class="campo"><label for="cfg-mapa-situacao">Situação do Qualitor → status do site (JSON)</label><textarea id="cfg-mapa-situacao" rows="3" class="mono"></textarea></div>
+        </div>
+      </details>
+
+      <p class="erro-msg" id="cfg-erro"></p>
+      <div class="modal-acoes"><button type="submit" class="botao-primario" id="btn-salvar-cfg">Salvar configuração</button></div>
+    </form>
+
+    <!-- Técnicos -->
+    <section class="card">
+      <h2>Técnicos no Qualitor</h2>
+      <p class="texto-suave" style="font-size:13px">O código de cada técnico no Qualitor. Serve para, ao assumir um chamado no site, ele ficar com a pessoa certa lá, e para reconhecer quem assumiu pelo Qualitor. Para descobrir: em "Explorar campos", consulte um chamado que a pessoa atendeu e veja o campo <code>cdresponsavel</code> (ou parecido).</p>
+      <div class="tabela-wrapper" style="box-shadow:none">
+        <table>
+          <thead><tr><th>Técnico no site</th><th>Código no Qualitor</th><th></th></tr></thead>
+          <tbody id="tabela-tecnicos"><tr><td colspan="3" class="carregando">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Explorar -->
+    <section class="card integ-explorar">
+      <h2>Explorar campos do Qualitor</h2>
+      <p class="texto-suave" style="font-size:13px">Consulta só leitura, para ver os nomes dos campos e códigos do seu Qualitor.</p>
+      <div class="linha-dupla">
+        <div class="campo">
+          <label for="exp-metodo">Método</label>
+          <select id="exp-metodo">
+            <option value="getTicketData">getTicketData — um chamado</option>
+            <option value="getTicketsData">getTicketsData — busca (fila da equipe)</option>
+            <option value="getTeams">getTeams — equipes</option>
+            <option value="getSeverities">getSeverities — severidades</option>
+            <option value="getTicketHistoryData">getTicketHistoryData — histórico</option>
+            <option value="getVersion">getVersion — versão</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="exp-cdchamado">Nº de um chamado do Qualitor (opcional)</label>
+          <input type="text" id="exp-cdchamado" placeholder="Ex.: 123456" />
+        </div>
+      </div>
+      <button type="button" class="botao-secundario" id="btn-explorar">Consultar</button>
+      <pre class="integ-saida" id="exp-saida" hidden></pre>
+    </section>
+
+    <!-- Histórico -->
+    <section class="card">
+      <h2>Histórico de alterações da integração</h2>
+      <p class="texto-suave" style="font-size:13px">Toda mudança fica registrada. Mudanças sensíveis (escopo, servidor, ligar/desligar, modo) avisam os outros admins no sino.</p>
+      <div class="tabela-wrapper" style="box-shadow:none">
+        <table>
+          <thead><tr><th>Quando</th><th>Quem</th><th>O que mudou</th></tr></thead>
+          <tbody id="tabela-log"><tr><td colspan="3" class="carregando">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Fila -->
+    <section class="card">
+      <h2>Últimos envios</h2>
+      <div class="tabela-wrapper" style="box-shadow:none">
+        <table>
+          <thead><tr><th>Quando</th><th>Chamado</th><th>O quê</th><th>Situação</th><th></th></tr></thead>
+          <tbody id="tabela-fila"><tr><td colspan="5" class="carregando">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="js/integracoes.js"></script>
+</body>
+</html>

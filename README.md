@@ -311,6 +311,42 @@ Faça **nesta ordem**:
 
 Faça **nesta ordem**: `git add .`, `git commit -m "Chamado automático de manutenção e links úteis"`, `git push`; depois rode o `supabase/schema.sql` inteiro no SQL Editor.
 
+### Outubro/2026 — Integração com o Qualitor (fazer uma vez)
+
+O site passa a ser o "frontend" do Qualitor:
+
+- **Chamado aberto no site** (inclusive pelo portal e pelo chamado automático de manutenção) é aberto no Qualitor na hora (`addTicketByData`). O número do Qualitor aparece no chamado como um selo "Q 123456 ↗" que abre o chamado lá.
+- **Anotações** feitas no site viram acompanhamento no Qualitor (`addTicketHistory`). **Resolver** no site encerra no Qualitor (`closeTicket`), usando a nota da solução.
+- **Assumir, iniciar, mudar prioridade e reabrir** no site também valem no Qualitor (`transferTicketResponsible`, `startTicket`, `changeTicketSeverity`, `reopenTicket`). Para o responsável ir certo, cadastre o código de cada técnico em **Integrações → Técnicos no Qualitor**.
+- O Qualitor da Comm (atendente "COM_TI") fica em `portal.vantix.com.br`; o webservice usado é `https://portal.vantix.com.br/ws/services/Ticket/WSTicket.php` (versão 8.20, 83 métodos).
+- **A cada 5 minutos**, o site traz os chamados novos da **fila da equipe** no Qualitor (`getTicketsData`) e atualiza a situação e o responsável dos chamados já ligados (`getTicketData`).
+- Se o Qualitor estiver fora do ar, o envio fica na fila e é tentado de novo (até 5 vezes). Falhas aparecem no chamado ("Não foi para o Qualitor") e na tela **Integrações**, onde o admin pode **Reenviar**.
+
+A senha do Qualitor **nunca** fica no site nem no banco: fica só nos *Secrets* da Edge Function.
+
+**Escopo:** mesmo que o usuário do Qualitor enxergue chamados de outras áreas, a função só deixa passar chamados da equipe configurada em **Integrações → Escopo** (o time Matriz da TI). O resto é descartado dentro da função e nunca chega ao banco nem à tela, inclusive no "Explorar campos". Sem equipe configurada, nenhum chamado é lido. Se um chamado ligado for transferido para outra equipe no Qualitor, o site para de copiar os detalhes dele. Essa trava é do site: a credencial em si continua com o acesso que tiver no Qualitor, por isso o ideal é um usuário de integração restrito à equipe.
+
+Passos:
+
+1. No Supabase, em **Database → Extensions**, ligue `pg_net` e `pg_cron`. Depois rode o `supabase/schema.sql` inteiro no SQL Editor.
+2. **Edge Functions → Deploy a new function → Via Editor**: nome `qualitor`, cole o conteúdo de `supabase/functions/qualitor/index.ts` e publique. Nas configurações da função, **desligue "Verify JWT"** (a função faz a própria checagem: segredo interno ou token de admin).
+3. Em **Edge Functions → Secrets**, crie `QUALITOR_LOGIN`, `QUALITOR_SENHA` e `QUALITOR_EMPRESA` (usuário de integração que a Vantix liberar com acesso aos WebServices).
+4. No site, menu **Integrações** (só admin): clique em **Usar o padrão** no endereço da função, preencha os códigos (cliente, contato, tipo, categoria e equipe Matriz) e o **Escopo** (equipe permitida, por exemplo o código da equipe e "Time Matriz"; opcionalmente "Backoffice" como local do solicitante) e salve. Clique em **Testar conexão**.
+5. Use **Explorar campos** (só leitura) com o número de um chamado real para ver os nomes dos campos do seu Qualitor. Se forem diferentes, ajuste em **Avançado: modelos XML e mapas**.
+6. Ligue a **Integração ligada**. Chamados antigos não são enviados; só os abertos a partir daí.
+
+**Travas de segurança (aplicadas na configuração, pelo banco e pela função):**
+
+- **Senha só vai para o Qualitor:** o webservice precisa ser `https://` e o servidor precisa estar no Secret `QUALITOR_HOSTS` (padrão `portal.vantix.com.br` e `qualitor.vantix.com.br`). Mudar o endereço na tela para outro servidor não envia a senha.
+- **Modo validação (padrão):** a integração começa só lendo. Para abrir, anotar e encerrar no Qualitor, um admin confirma que os Secrets usam um **usuário de integração dedicado**; nome e hora ficam registrados. "Voltar para só leitura" desfaz.
+- **Escopo obrigatório:** não liga sem equipe definida; a resposta do Qualitor precisa ser do chamado pedido (modelo adulterado não fura o escopo).
+- **Segredo interno** fica numa tabela que ninguém lê pelo site, nem admin. Botão "Gerar novo segredo interno" para trocar.
+- **Edge Function** só pode ser a do seu projeto (`https://<projeto>.supabase.co/functions/v1/qualitor`).
+- **Portal:** chamado aberto sem login só vai ao Qualitor depois que um técnico assumir (triagem; dá para desligar).
+- **Histórico:** toda alteração da integração fica registrada, e mudanças sensíveis avisam os outros admins no sino.
+
+Observação: os nomes dos campos dos modelos XML vieram da documentação pública do WebService do Qualitor (WSTicket). Cada instalação pode ter campos obrigatórios ou códigos próprios, por isso eles ficam editáveis na tela.
+
 ### Relatório de pendências das 18h
 
 Ele usa a mesma propriedade `SUPABASE_SERVICE_KEY` do backup diário. Se o backup ainda não foi ligado, siga o passo 1 de "Backup diário" antes.

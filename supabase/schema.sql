@@ -1041,7 +1041,7 @@ grant execute on function public.relatorio_pendencias(date) to service_role;
 create table if not exists public.notificacoes (
   id          bigint generated always as identity primary key,
   usuario_id  uuid not null references public.usuarios (id) on delete cascade,
-  tipo        text not null check (tipo in ('atribuicao', 'mencao', 'comentario', 'resolvido', 'tarefa', 'novo_chamado')),
+  tipo        text not null,
   titulo      text not null check (char_length(titulo) <= 200),
   texto       text not null default '' check (char_length(texto) <= 300),
   link        text not null default '' check (char_length(link) <= 300),
@@ -1065,6 +1065,10 @@ create policy notificacoes_apagar on public.notificacoes for delete to authentic
 revoke insert on public.notificacoes from authenticated;
 revoke update on public.notificacoes from authenticated;
 grant update (lida) on public.notificacoes to authenticated;
+
+alter table public.notificacoes drop constraint if exists notificacoes_tipo_check;
+alter table public.notificacoes add constraint notificacoes_tipo_check
+  check (tipo in ('atribuicao', 'mencao', 'comentario', 'resolvido', 'tarefa', 'novo_chamado', 'seguranca'));
 
 create or replace function public.notificar(p_para uuid, p_tipo text, p_titulo text, p_texto text, p_link text)
 returns void language plpgsql security definer set search_path = public as $$
@@ -1164,7 +1168,7 @@ create trigger tarefas_notificar after insert or update on public.tarefas
 
 alter table public.chamados add column if not exists origem text not null default 'interno';
 alter table public.chamados drop constraint if exists chamados_origem_check;
-alter table public.chamados add constraint chamados_origem_check check (origem in ('interno', 'portal'));
+alter table public.chamados add constraint chamados_origem_check check (origem in ('interno', 'portal', 'qualitor'));
 alter table public.chamados add column if not exists solicitante_nome text check (char_length(solicitante_nome) <= 120);
 alter table public.chamados add column if not exists solicitante_setor text check (char_length(solicitante_setor) <= 120);
 alter table public.chamados add column if not exists solicitante_contato text check (char_length(solicitante_contato) <= 120);
@@ -1415,6 +1419,527 @@ select * from (values
 ) as v(titulo, url, descricao, categoria, ordem)
 where not exists (select 1 from public.links_uteis);
 
+-- ==================================================================
+-- INTEGRAÇÃO COM O QUALITOR (o site como "frontend" do Qualitor)
+-- ==================================================================
+-- Ida:   chamado aberto no site (inclusive portal e manutenção) → abre no
+--        Qualitor; anotação → acompanhamento; resolver → encerra.
+-- Volta: a cada 5 minutos, atualiza a situação dos chamados ligados e
+--        traz os chamados novos da fila da equipe no Qualitor.
+-- Quem conversa com o Qualitor é a Edge Function "qualitor" (login e senha
+-- ficam nos Secrets do Supabase, nunca no site). Aqui ficam a fila de envio,
+-- os gatilhos e a configuração.
+
+-- Extensões do Supabase para chamar a função (pg_net) e agendar (pg_cron).
+do $$ begin
+  create extension if not exists pg_net with schema extensions;
+exception when others then raise notice 'pg_net indisponível: %', sqlerrm; end $$;
+do $$ begin
+  create extension if not exists pg_cron;
+exception when others then raise notice 'pg_cron indisponível: %', sqlerrm; end $$;
+
+alter table public.chamados drop constraint if exists chamados_origem_check;
+alter table public.chamados add constraint chamados_origem_check check (origem in ('interno', 'portal', 'qualitor'));
+alter table public.chamados add column if not exists qualitor_numero text;
+alter table public.chamados add column if not exists qualitor_situacao text;
+alter table public.chamados add column if not exists qualitor_responsavel text;
+alter table public.chamados add column if not exists qualitor_sync text
+  check (qualitor_sync in ('pendente', 'ok', 'erro'));
+alter table public.chamados add column if not exists qualitor_erro text;
+alter table public.chamados add column if not exists qualitor_atualizado_em timestamptz;
+create unique index if not exists chamados_qualitor_numero_idx on public.chamados (qualitor_numero) where qualitor_numero is not null;
+
+create table if not exists public.qualitor_config (
+  id                 integer primary key default 1 check (id = 1),
+  ativo              boolean not null default false,
+  importar           boolean not null default true,
+  enviar_anotacoes   boolean not null default true,
+  encerrar_ao_resolver boolean not null default true,
+  url_ws             text not null default 'https://portal.vantix.com.br/ws/services/Ticket/WSTicket.php',
+  url_chamado        text not null default '',
+  funcao_url         text not null default '',
+  xml_abertura       text not null default
+'<wsqualitor><contents><data>
+<cdcliente>{{cdcliente}}</cdcliente>
+<cdcontato>{{cdcontato}}</cdcontato>
+<cdtipochamado>{{cdtipochamado}}</cdtipochamado>
+<cdcategoria>{{cdcategoria}}</cdcategoria>
+<cdequipe>{{cdequipe}}</cdequipe>
+<cdseveridade>{{severidade}}</cdseveridade>
+<nmtitulochamado>{{titulo}}</nmtitulochamado>
+<dschamado>{{descricao}}</dschamado>
+</data></contents></wsqualitor>',
+  xml_acompanhamento text not null default
+'<wsqualitor><contents><data>
+<cdchamado>{{cdchamado}}</cdchamado>
+<dsacompanhamento>{{texto}}</dsacompanhamento>
+<idtipoacompanhamento>1</idtipoacompanhamento>
+</data></contents></wsqualitor>',
+  xml_encerramento   text not null default
+'<wsqualitor><contents><data>
+<cdchamado>{{cdchamado}}</cdchamado>
+<dssolucao>{{texto}}</dssolucao>
+</data></contents></wsqualitor>',
+  xml_consulta       text not null default
+'<wsqualitor><contents><data>
+<cdchamado>{{cdchamado}}</cdchamado>
+</data></contents></wsqualitor>',
+  xml_busca          text not null default
+'<wsqualitor><contents><data>
+<cdequipe>{{cdequipe}}</cdequipe>
+<idsituacao>A</idsituacao>
+</data></contents></wsqualitor>',
+  -- Códigos fixos usados nos modelos acima ({{cdcliente}}, {{cdcategoria}}...).
+  codigos            jsonb not null default '{"cdcliente":"","cdcontato":"","cdtipochamado":"","cdcategoria":"","cdequipe":""}'::jsonb,
+  -- Prioridade do site → severidade do Qualitor.
+  mapa_prioridade    jsonb not null default '{"alta":"1","media":"2","baixa":"3"}'::jsonb,
+  -- Situação do Qualitor (texto contém…) → status do site.
+  mapa_situacao      jsonb not null default '{"resolvido":["encerrad","fechad","resolvid","conclu","cancelad"],"andamento":["atendimento","andamento","execu","aguardando"]}'::jsonb,
+  ultima_sinc        timestamptz,
+  ultimo_erro        text,
+  atualizado_em      timestamptz not null default now()
+);
+insert into public.qualitor_config (id) values (1) on conflict (id) do nothing;
+
+-- Escopo: só chamados destas equipes (código ou nome exato) passam pela
+-- integração, mesmo que o usuário do Qualitor enxergue mais. "locais"
+-- (opcional) restringe ainda pelo local/departamento do solicitante.
+-- Ações do site que também refletem no Qualitor (o site como "frontend"):
+-- assumir/atribuir, iniciar, mudar prioridade e reabrir.
+alter table public.qualitor_config add column if not exists enviar_acoes boolean not null default true;
+alter table public.qualitor_config add column if not exists xml_atribuir text not null default
+'<wsqualitor><contents><data>
+<cdchamado>{{cdchamado}}</cdchamado>
+<cdresponsavel>{{cdresponsavel}}</cdresponsavel>
+</data></contents></wsqualitor>';
+alter table public.qualitor_config add column if not exists xml_iniciar text not null default
+'<wsqualitor><contents><data>
+<cdchamado>{{cdchamado}}</cdchamado>
+</data></contents></wsqualitor>';
+alter table public.qualitor_config add column if not exists xml_prioridade text not null default
+'<wsqualitor><contents><data>
+<cdchamado>{{cdchamado}}</cdchamado>
+<cdseveridade>{{severidade}}</cdseveridade>
+</data></contents></wsqualitor>';
+alter table public.qualitor_config add column if not exists xml_reabrir text not null default
+'<wsqualitor><contents><data>
+<cdchamado>{{cdchamado}}</cdchamado>
+<dsjustificativa>{{texto}}</dsjustificativa>
+</data></contents></wsqualitor>';
+
+-- O Qualitor da Comm (atendente "COM_TI") roda em portal.vantix.com.br.
+alter table public.qualitor_config alter column url_ws set default 'https://portal.vantix.com.br/ws/services/Ticket/WSTicket.php';
+update public.qualitor_config set url_ws = 'https://portal.vantix.com.br/ws/services/Ticket/WSTicket.php'
+ where url_ws = 'https://qualitor.vantix.com.br/ws/services/Ticket/WSTicket.php' and not ativo;
+alter table public.qualitor_config add column if not exists escopo jsonb not null default '{"equipes":[],"locais":[]}'::jsonb;
+
+-- ---------------------------------------------------- travas de segurança
+-- Modo validação (padrão): a integração só LÊ o Qualitor. Para escrever
+-- (abrir, anotar, encerrar) um admin precisa confirmar que os Secrets usam
+-- um usuário de integração dedicado — a confirmação fica registrada.
+alter table public.qualitor_config add column if not exists modo_validacao boolean not null default true;
+alter table public.qualitor_config add column if not exists conta_servico_confirmada_por text;
+alter table public.qualitor_config add column if not exists conta_servico_confirmada_em timestamptz;
+-- Chamado do portal (sem login) só vai ao Qualitor depois que um técnico assumir.
+alter table public.qualitor_config add column if not exists portal_triagem boolean not null default true;
+
+-- O segredo interno (banco → Edge Function) fica numa tabela que NINGUÉM
+-- lê pelo site, nem admin. Só o banco (security definer) e a função.
+create table if not exists public.qualitor_segredo (
+  id    integer primary key default 1 check (id = 1),
+  valor text not null
+);
+alter table public.qualitor_segredo enable row level security;
+revoke all on public.qualitor_segredo from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'qualitor_config' and column_name = 'segredo') then
+    insert into public.qualitor_segredo (id, valor)
+      select 1, segredo from public.qualitor_config where id = 1 and segredo <> '' on conflict (id) do nothing;
+    alter table public.qualitor_config drop column segredo;
+  end if;
+end $$;
+insert into public.qualitor_segredo (id, valor)
+  values (1, replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''))
+  on conflict (id) do nothing;
+
+-- Admin: gera um segredo novo (se houver suspeita de vazamento).
+create or replace function public.qualitor_trocar_segredo()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.eh_admin() then raise exception 'Apenas o supervisor/admin.' using errcode = '42501'; end if;
+  update qualitor_segredo set valor = replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '') where id = 1;
+  insert into qualitor_config_log (usuario_id, usuario_nome, campos, resumo)
+  values (auth.uid(), meu_nome(), array['segredo'], 'Segredo interno trocado');
+end $$;
+
+-- Histórico de alterações da configuração (quem, quando, o quê).
+create table if not exists public.qualitor_config_log (
+  id           bigint generated always as identity primary key,
+  quando       timestamptz not null default now(),
+  usuario_id   uuid,
+  usuario_nome text,
+  campos       text[] not null default '{}',
+  resumo       text not null default ''
+);
+alter table public.qualitor_config_log enable row level security;
+drop policy if exists qualitor_config_log_ler on public.qualitor_config_log;
+create policy qualitor_config_log_ler on public.qualitor_config_log for select to authenticated
+  using ((select public.eh_admin()));
+revoke insert, update, delete on public.qualitor_config_log from anon, authenticated;
+revoke execute on function public.qualitor_trocar_segredo() from public, anon;
+grant execute on function public.qualitor_trocar_segredo() to authenticated;
+
+-- Validação NO ATO da configuração: o banco recusa o que for inseguro.
+create or replace function public.tg_qualitor_config_valida()
+returns trigger language plpgsql as $$
+declare
+  equipes int := jsonb_array_length(coalesce(new.escopo -> 'equipes', '[]'::jsonb));
+  locais  int := jsonb_array_length(coalesce(new.escopo -> 'locais', '[]'::jsonb));
+begin
+  if new.url_ws !~ '^https://[A-Za-z0-9.-]+(:[0-9]+)?/' then
+    raise exception 'O endereço do webservice precisa começar com https:// (a senha do Qualitor não pode trafegar sem criptografia).' using errcode = '22023';
+  end if;
+  if new.funcao_url <> '' and new.funcao_url !~ '^https://[a-z0-9]+\.supabase\.co/functions/v1/qualitor$' then
+    raise exception 'O endereço da Edge Function precisa ser o do seu projeto: https://<projeto>.supabase.co/functions/v1/qualitor (use o botão "Usar o padrão").' using errcode = '22023';
+  end if;
+  if new.url_chamado <> '' and new.url_chamado !~ '^https://' then
+    raise exception 'O link para abrir chamados no Qualitor precisa começar com https://.' using errcode = '22023';
+  end if;
+  if new.xml_consulta not like '%{{cdchamado}}%' or new.xml_acompanhamento not like '%{{cdchamado}}%' or new.xml_encerramento not like '%{{cdchamado}}%' then
+    raise exception 'Os modelos de consulta, acompanhamento e encerramento precisam usar {{cdchamado}} (senão a ação cairia em outro chamado).' using errcode = '22023';
+  end if;
+  if new.xml_atribuir not like '%{{cdchamado}}%' or new.xml_iniciar not like '%{{cdchamado}}%'
+     or new.xml_prioridade not like '%{{cdchamado}}%' or new.xml_reabrir not like '%{{cdchamado}}%' then
+    raise exception 'Os modelos de atribuir, iniciar, prioridade e reabrir precisam usar {{cdchamado}}.' using errcode = '22023';
+  end if;
+  if new.xml_atribuir not like '%{{cdresponsavel}}%' then
+    raise exception 'O modelo de atribuir precisa usar {{cdresponsavel}}.' using errcode = '22023';
+  end if;
+  if equipes > 10 or locais > 10 then
+    raise exception 'Escopo: no máximo 10 equipes e 10 locais.' using errcode = '22023';
+  end if;
+  if new.ativo and equipes = 0 and coalesce(new.codigos ->> 'cdequipe', '') = '' then
+    raise exception 'Defina a equipe permitida (Escopo) antes de ligar a integração.' using errcode = '22023';
+  end if;
+  if new.ativo and new.funcao_url = '' then
+    raise exception 'Preencha o endereço da Edge Function antes de ligar a integração.' using errcode = '22023';
+  end if;
+  -- A confirmação da conta de serviço só é gravada pelo próprio banco.
+  if tg_op = 'UPDATE' then
+    new.conta_servico_confirmada_por := old.conta_servico_confirmada_por;
+    new.conta_servico_confirmada_em := old.conta_servico_confirmada_em;
+    if old.modo_validacao and not new.modo_validacao then
+      if auth.uid() is null then new.modo_validacao := true;
+      else
+        new.conta_servico_confirmada_por := public.meu_nome();
+        new.conta_servico_confirmada_em := now();
+      end if;
+    elsif new.modo_validacao and not old.modo_validacao then
+      new.conta_servico_confirmada_por := null;
+      new.conta_servico_confirmada_em := null;
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists qualitor_config_valida on public.qualitor_config;
+create trigger qualitor_config_valida before insert or update on public.qualitor_config
+  for each row execute function public.tg_qualitor_config_valida();
+
+-- Registra a alteração e avisa os OUTROS admins quando algo sensível muda.
+create or replace function public.tg_qualitor_config_log()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  a jsonb := to_jsonb(old) - array['atualizado_em', 'ultima_sinc', 'ultimo_erro'];
+  b jsonb := to_jsonb(new) - array['atualizado_em', 'ultima_sinc', 'ultimo_erro'];
+  campos text[]; sensiveis text[]; partes text[] := '{}'; k text; adm record;
+begin
+  select array_agg(key order by key) into campos from jsonb_each(b) where b -> key is distinct from a -> key;
+  if campos is null then return null; end if;
+  sensiveis := array(select unnest(campos) intersect select unnest(array['ativo', 'modo_validacao', 'url_ws', 'funcao_url', 'escopo', 'codigos', 'importar', 'xml_busca', 'xml_consulta', 'portal_triagem']));
+  foreach k in array campos loop
+    if k in ('ativo', 'modo_validacao', 'importar', 'portal_triagem', 'url_ws', 'funcao_url', 'escopo') then
+      partes := partes || format('%s: %s → %s', k, a -> k, b -> k);
+    else
+      partes := partes || k;
+    end if;
+  end loop;
+  insert into qualitor_config_log (usuario_id, usuario_nome, campos, resumo)
+  values (auth.uid(), coalesce(meu_nome(), 'sistema'), campos, left(array_to_string(partes, '; '), 2000));
+  if array_length(sensiveis, 1) > 0 then
+    for adm in select id from usuarios where papel = 'admin' loop
+      perform notificar(adm.id, 'seguranca', 'Integração Qualitor alterada',
+        coalesce(meu_nome(), 'Sistema') || ' mudou: ' || array_to_string(sensiveis, ', '), 'integracoes.html');
+    end loop;
+  end if;
+  return null;
+end $$;
+drop trigger if exists qualitor_config_log on public.qualitor_config;
+create trigger qualitor_config_log after update on public.qualitor_config
+  for each row execute function public.tg_qualitor_config_log();
+
+-- Escreve no Qualitor só com a integração ligada E fora do modo validação.
+create or replace function public.qualitor_escreve()
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce((select ativo and not modo_validacao from qualitor_config where id = 1), false);
+$$;
+create or replace function public.qualitor_portal_triagem()
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce((select portal_triagem from qualitor_config where id = 1), true);
+$$;
+-- Chamados abertos pelo site caem na equipe configurada.
+update public.qualitor_config
+   set xml_abertura = replace(xml_abertura, '<cdcategoria>{{cdcategoria}}</cdcategoria>', E'<cdcategoria>{{cdcategoria}}</cdcategoria>\n<cdequipe>{{cdequipe}}</cdequipe>')
+ where xml_abertura not like '%{{cdequipe}}%' and xml_abertura like '%<cdcategoria>{{cdcategoria}}</cdcategoria>%';
+
+create table if not exists public.qualitor_fila (
+  id            bigint generated always as identity primary key,
+  tipo          text not null,
+  chamado_id    text not null references public.chamados (id) on delete cascade,
+  texto         text not null default '' check (char_length(texto) <= 4000),
+  autor_nome    text,
+  status        text not null default 'pendente',
+  tentativas    integer not null default 0,
+  erro          text,
+  criado_em     timestamptz not null default now(),
+  processado_em timestamptz
+);
+alter table public.qualitor_fila drop constraint if exists qualitor_fila_tipo_check;
+alter table public.qualitor_fila add constraint qualitor_fila_tipo_check
+  check (tipo in ('abrir', 'acompanhar', 'encerrar', 'atribuir', 'iniciar', 'prioridade', 'reabrir'));
+create index if not exists qualitor_fila_pendente_idx on public.qualitor_fila (status, criado_em);
+alter table public.qualitor_fila drop constraint if exists qualitor_fila_status_check;
+alter table public.qualitor_fila add constraint qualitor_fila_status_check check (status in ('pendente', 'processando', 'ok', 'erro'));
+
+-- Chamado novo vindo do Qualitor sem responsável: avisa o time no sino.
+create or replace function public.qualitor_notificar_novo(p_chamado text)
+returns void language plpgsql security definer set search_path = public as $$
+declare c chamados; u record;
+begin
+  select * into c from chamados where id = p_chamado;
+  if not found or c.responsavel_uid is not null then return; end if;
+  for u in select id from usuarios where papel <> 'painel' and not ausente_no_dia(id) loop
+    insert into notificacoes (usuario_id, tipo, titulo, texto, link, autor_nome)
+    values (u.id, 'novo_chamado', 'Novo chamado no Qualitor: ' || c.numero,
+            left(c.area || ' · ' || c.atividade, 300), 'chamados.html#c=' || c.id, 'Qualitor');
+  end loop;
+end $$;
+revoke execute on function public.qualitor_notificar_novo(text) from public, anon, authenticated;
+grant execute on function public.qualitor_notificar_novo(text) to service_role;
+
+alter table public.qualitor_config enable row level security;
+alter table public.qualitor_fila enable row level security;
+drop policy if exists qualitor_config_ler on public.qualitor_config;
+drop policy if exists qualitor_config_editar on public.qualitor_config;
+drop policy if exists qualitor_fila_ler on public.qualitor_fila;
+create policy qualitor_config_ler on public.qualitor_config for select to authenticated
+  using ((select public.eh_admin()));
+create policy qualitor_config_editar on public.qualitor_config for update to authenticated
+  using ((select public.eh_admin())) with check ((select public.eh_admin()));
+create policy qualitor_fila_ler on public.qualitor_fila for select to authenticated
+  using ((select public.eh_admin()));
+revoke all on public.qualitor_config, public.qualitor_fila from anon;
+
+-- O que todo membro do time pode saber (link para abrir o chamado no Qualitor).
+create or replace function public.qualitor_publico()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select case when public.eh_membro() or public.eh_painel()
+    then jsonb_build_object('ativo', ativo, 'url_chamado', url_chamado) else null end
+  from qualitor_config where id = 1;
+$$;
+revoke execute on function public.qualitor_publico() from public, anon;
+grant execute on function public.qualitor_publico() to authenticated;
+
+-- Acorda a Edge Function (sem esperar resposta). Se pg_net ou a URL não
+-- estiverem configurados, não faz nada: o agendamento de 5 min processa depois.
+create or replace function public.qualitor_acordar(p_acao text default 'processar')
+returns void language plpgsql security definer set search_path = public as $$
+declare cfg qualitor_config; seg text;
+begin
+  select * into cfg from qualitor_config where id = 1;
+  if not found or not cfg.ativo or cfg.funcao_url = '' then return; end if;
+  select valor into seg from qualitor_segredo where id = 1;
+  begin
+    execute 'select net.http_post(url := $1, body := $2, headers := $3, timeout_milliseconds := 30000)'
+      using cfg.funcao_url,
+            jsonb_build_object('acao', p_acao, 'segredo', seg),
+            jsonb_build_object('Content-Type', 'application/json');
+  exception when others then
+    raise notice 'Qualitor: não foi possível acordar a função: %', sqlerrm;
+  end;
+end $$;
+revoke execute on function public.qualitor_acordar(text) from public, anon, authenticated;
+
+create or replace function public.qualitor_ativo()
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce((select ativo from qualitor_config where id = 1), false);
+$$;
+
+-- Campos do Qualitor só mudam pela sincronização (sem usuário logado).
+-- Pelo site ninguém altera o número/situação nem cria chamado "do Qualitor".
+create or replace function public.tg_qualitor_protege()
+returns trigger language plpgsql as $$
+begin
+  if auth.uid() is not null and current_setting('hd.qualitor_interno', true) is distinct from '1' then
+    if tg_op = 'INSERT' then
+      if new.origem = 'qualitor' then new.origem := 'interno'; end if;
+      new.qualitor_numero := null; new.qualitor_situacao := null; new.qualitor_responsavel := null;
+      new.qualitor_erro := null; new.qualitor_atualizado_em := null; new.qualitor_sync := null;
+    else
+      new.origem := old.origem;
+      new.qualitor_numero := old.qualitor_numero; new.qualitor_situacao := old.qualitor_situacao;
+      new.qualitor_responsavel := old.qualitor_responsavel; new.qualitor_erro := old.qualitor_erro;
+      new.qualitor_atualizado_em := old.qualitor_atualizado_em; new.qualitor_sync := old.qualitor_sync;
+    end if;
+  end if;
+  -- Chamado novo do site/portal/manutenção com a integração escrevendo: "enviando".
+  -- Do portal (sem login), só depois que um técnico assumir (triagem).
+  if tg_op = 'INSERT' and new.origem <> 'qualitor' and new.qualitor_numero is null
+     and public.qualitor_escreve()
+     and not (new.origem = 'portal' and public.qualitor_portal_triagem()) then
+    new.qualitor_sync := 'pendente';
+  end if;
+  if tg_op = 'UPDATE' and new.origem = 'portal' and new.qualitor_numero is null and new.qualitor_sync is null
+     and old.responsavel_uid is null and new.responsavel_uid is not null and public.qualitor_escreve() then
+    new.qualitor_sync := 'pendente';
+  end if;
+  return new;
+end $$;
+drop trigger if exists chamados_qualitor_protege on public.chamados;
+create trigger chamados_qualitor_protege before insert or update on public.chamados
+  for each row execute function public.tg_qualitor_protege();
+
+-- Chamado novo no site → fila "abrir" (vale para portal e manutenção também).
+create or replace function public.tg_qualitor_chamado_novo()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.origem = 'qualitor' or new.qualitor_numero is not null or new.qualitor_sync is distinct from 'pendente' then return null; end if;
+  if tg_op = 'UPDATE' then
+    -- Só o chamado do portal que acabou de sair da triagem.
+    if old.qualitor_sync is not null or new.origem <> 'portal' then return null; end if;
+    if exists (select 1 from qualitor_fila where chamado_id = new.id and tipo = 'abrir' and status <> 'ok') then return null; end if;
+  end if;
+  insert into qualitor_fila (tipo, chamado_id, autor_nome) values ('abrir', new.id, coalesce(meu_nome(), new.criado_por_nome));
+  perform qualitor_acordar('processar');
+  return null;
+end $$;
+drop trigger if exists chamados_qualitor_novo on public.chamados;
+create trigger chamados_qualitor_novo after insert or update on public.chamados
+  for each row execute function public.tg_qualitor_chamado_novo();
+
+-- Resolvido no site → encerra no Qualitor. (Mudanças feitas pela própria
+-- sincronização vêm sem usuário logado e não voltam para o Qualitor.)
+create or replace function public.tg_qualitor_chamado_resolvido()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare nota text;
+begin
+  if auth.uid() is null then return null; end if;
+  if not (new.status = 'resolvido' and old.status <> 'resolvido') then return null; end if;
+  if not exists (select 1 from qualitor_config where id = 1 and ativo and not modo_validacao and encerrar_ao_resolver) then return null; end if;
+  if new.qualitor_numero is null and new.qualitor_sync is null then return null; end if;
+  select texto into nota from chamado_eventos
+   where chamado_id = new.id and tipo = 'comentario' order by criado_em desc limit 1;
+  insert into qualitor_fila (tipo, chamado_id, texto, autor_nome)
+  values ('encerrar', new.id, coalesce(nota, 'Resolvido pela equipe de TI'), meu_nome());
+  perform qualitor_acordar('processar');
+  return null;
+end $$;
+drop trigger if exists chamados_qualitor_resolvido on public.chamados;
+create trigger chamados_qualitor_resolvido after update on public.chamados
+  for each row execute function public.tg_qualitor_chamado_resolvido();
+
+-- Anotação no site → acompanhamento no Qualitor.
+create or replace function public.tg_qualitor_anotacao()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare c chamados;
+begin
+  if auth.uid() is null or new.tipo <> 'comentario' then return null; end if;
+  if not exists (select 1 from qualitor_config where id = 1 and ativo and not modo_validacao and enviar_anotacoes) then return null; end if;
+  select * into c from chamados where id = new.chamado_id;
+  if c.qualitor_numero is null and c.qualitor_sync is null then return null; end if;
+  insert into qualitor_fila (tipo, chamado_id, texto, autor_nome) values ('acompanhar', new.chamado_id, new.texto, new.autor_nome);
+  perform qualitor_acordar('processar');
+  return null;
+end $$;
+drop trigger if exists chamado_eventos_qualitor on public.chamado_eventos;
+create trigger chamado_eventos_qualitor after insert on public.chamado_eventos
+  for each row execute function public.tg_qualitor_anotacao();
+
+-- Técnico do site ↔ usuário do Qualitor (para atribuir o responsável certo
+-- lá e reconhecer o responsável que vem de lá).
+create table if not exists public.qualitor_usuarios (
+  usuario_id uuid primary key references public.usuarios (id) on delete cascade,
+  cdusuario  text not null check (cdusuario ~ '^[0-9A-Za-z_.-]{1,40}$'),
+  atualizado_em timestamptz not null default now()
+);
+alter table public.qualitor_usuarios enable row level security;
+drop policy if exists qualitor_usuarios_admin on public.qualitor_usuarios;
+create policy qualitor_usuarios_admin on public.qualitor_usuarios for all to authenticated
+  using ((select public.eh_admin())) with check ((select public.eh_admin()));
+revoke all on public.qualitor_usuarios from anon;
+
+-- Assumir/atribuir, iniciar, prioridade e reabrir no site → fila do Qualitor.
+-- Só ações de pessoas (a sincronização vem sem usuário e não ecoa de volta).
+create or replace function public.tg_qualitor_acoes()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare quem text := meu_nome(); mexeu boolean := false;
+begin
+  if auth.uid() is null then return null; end if;
+  if new.origem = 'qualitor' and new.qualitor_numero is null then return null; end if;
+  if new.qualitor_numero is null and new.qualitor_sync is distinct from 'pendente' then return null; end if;
+  if not exists (select 1 from qualitor_config where id = 1 and ativo and not modo_validacao and enviar_acoes) then return null; end if;
+  if new.responsavel_uid is not null and new.responsavel_uid is distinct from old.responsavel_uid then
+    insert into qualitor_fila (tipo, chamado_id, texto, autor_nome) values ('atribuir', new.id, new.responsavel_uid::text, quem);
+    mexeu := true;
+  end if;
+  if old.status = 'aberto' and new.status = 'andamento' then
+    insert into qualitor_fila (tipo, chamado_id, autor_nome) values ('iniciar', new.id, quem);
+    mexeu := true;
+  end if;
+  if new.prioridade is distinct from old.prioridade then
+    insert into qualitor_fila (tipo, chamado_id, texto, autor_nome) values ('prioridade', new.id, new.prioridade, quem);
+    mexeu := true;
+  end if;
+  if old.status = 'resolvido' and new.status <> 'resolvido' then
+    insert into qualitor_fila (tipo, chamado_id, texto, autor_nome) values ('reabrir', new.id, 'Reaberto pelo Help Desk Matriz', quem);
+    mexeu := true;
+  end if;
+  if mexeu then perform qualitor_acordar('processar'); end if;
+  return null;
+end $$;
+drop trigger if exists chamados_qualitor_acoes on public.chamados;
+create trigger chamados_qualitor_acoes after update on public.chamados
+  for each row execute function public.tg_qualitor_acoes();
+
+-- Admin: mandar de novo um chamado que falhou.
+create or replace function public.qualitor_reenviar(p_chamado text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.eh_admin() then
+    raise exception 'Apenas o supervisor/admin pode reenviar.' using errcode = '42501';
+  end if;
+  if not public.qualitor_escreve() then
+    raise exception 'A integração está em modo validação (só leitura) ou desligada: nada é enviado ao Qualitor.' using errcode = '22023';
+  end if;
+  update qualitor_fila set status = 'pendente', tentativas = 0, erro = null
+   where chamado_id = p_chamado and status = 'erro';
+  if not found and not exists (select 1 from chamados where id = p_chamado and qualitor_numero is not null) then
+    insert into qualitor_fila (tipo, chamado_id, autor_nome) values ('abrir', p_chamado, meu_nome());
+  end if;
+  perform set_config('hd.qualitor_interno', '1', true);
+  update chamados set qualitor_sync = 'pendente', qualitor_erro = null where id = p_chamado and qualitor_numero is null;
+  perform set_config('hd.qualitor_interno', '0', true);
+  perform qualitor_acordar('processar');
+end $$;
+revoke execute on function public.qualitor_reenviar(text) from public, anon;
+grant execute on function public.qualitor_reenviar(text) to authenticated;
+
+-- Agendamento: a cada 5 minutos sincroniza (traz novidades e reprocessa a fila).
+do $$ begin
+  perform cron.unschedule(jobid) from cron.job where jobname = 'qualitor-sincronizar';
+  perform cron.schedule('qualitor-sincronizar', '*/5 * * * *', $c$select public.qualitor_acordar('sincronizar')$c$);
+exception when others then raise notice 'pg_cron indisponível: %', sqlerrm; end $$;
+
 -- ====================================================== REALTIME (telas ao vivo)
 do $$
 declare t text;
@@ -1422,7 +1947,7 @@ begin
   foreach t in array array['usuarios', 'sessoes_ativas', 'chamados', 'chamado_eventos', 'tarefas', 'tarefa_conclusoes',
                            'relatorios', 'maquinas',
                            'maquina_historico', 'itens_estoque', 'visitas',
-                           'solucoes', 'agenda_eventos', 'notificacoes', 'links_uteis'] loop
+                           'solucoes', 'agenda_eventos', 'notificacoes', 'links_uteis', 'qualitor_fila'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

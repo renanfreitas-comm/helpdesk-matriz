@@ -10,7 +10,7 @@
 // ==========================================================================
 import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
-import { observar, inserir, atualizar, excluir, listarUsuarios, paraDate } from "./db.js";
+import { supabase, observar, inserir, atualizar, excluir, listarUsuarios, paraDate } from "./db.js";
 import { PRAZO_HORAS, badgePrazo, situacaoPrazo, ordenarPorPrazo } from "./sla.js";
 import { botoesRapidos, ligarBotoesRapidos, mudarStatus, comentar, assumirChamado } from "./acoes-chamado.js";
 import { ausentesNoDia } from "./agenda-util.js";
@@ -25,7 +25,8 @@ let pararEventos = null;
 let detalheId = null;
 let modoVisual = lerPreferencia("hd-chamados-modo", "lista"); // "lista" | "quadro"
 let solucoes = [];
-let ausentesHoje = new Map();  // quem está de férias/atestado/folga hoje (Agenda)
+let ausentesHoje = new Map();
+let qualitorInfo = null;      // { ativo, url_chamado } — integração com o Qualitor  // quem está de férias/atestado/folga hoje (Agenda)
 
 const tabelaBody = document.getElementById("tabela-chamados");
 const modal = document.getElementById("modal-chamado");
@@ -53,6 +54,7 @@ protegerPagina(async (user, perfil) => {
   observarChamados();
   carregarSolucoes().then((l) => { solucoes = l; atualizarDetalheAberto(); });
   carregarAusentes();
+  supabase.rpc("qualitor_publico").then(({ data }) => { qualitorInfo = data || null; renderizarTabela(); atualizarDetalheAberto(); }, () => {});
 });
 
 // Quem está fora hoje (férias, atestado, folga): aparece marcado na escolha
@@ -515,7 +517,15 @@ function renderizarDetalhe() {
          ${c.solicitanteContato ? `<div><dt>Contato</dt><dd>${escaparHTML(c.solicitanteContato)}</dd></div>` : ""}`
       : `<div><dt>Aberto por</dt><dd>${escaparHTML(c.criadoPorNome || "—")}</dd></div>`}
     <div><dt>Aberto em</dt><dd>${formatarDataHora(c.criadoEm)}</dd></div>
-    ${c.resolvidoEm ? `<div><dt>Resolvido em</dt><dd>${formatarDataHora(c.resolvidoEm)}</dd></div>` : ""}`;
+    ${c.resolvidoEm ? `<div><dt>Resolvido em</dt><dd>${formatarDataHora(c.resolvidoEm)}</dd></div>` : ""}
+    ${c.qualitorNumero || c.qualitorSync ? `<div class="detalhe-qualitor"><dt>Qualitor</dt><dd>${seloQualitor(c)}${c.qualitorSituacao ? ` <span class="texto-suave">${escaparHTML(c.qualitorSituacao)}</span>` : ""}${c.qualitorResponsavel && !c.responsavelUid ? ` <span class="texto-suave">· com ${escaparHTML(c.qualitorResponsavel)} (Qualitor)</span>` : ""}${c.qualitorSync === "erro" ? `<br><small class="texto-suave">${escaparHTML(c.qualitorErro || "")}</small>${ehAdmin() ? ` <button type="button" class="botao-secundario botao-pequeno" id="btn-reenviar-qualitor">Reenviar</button>` : ""}` : ""}</dd></div>` : ""}`;
+  const reenviar = document.getElementById("btn-reenviar-qualitor");
+  if (reenviar) reenviar.addEventListener("click", async () => {
+    reenviar.disabled = true;
+    const { error } = await supabase.rpc("qualitor_reenviar", { p_chamado: c.id });
+    if (error) { alert("Não foi possível reenviar: " + error.message); reenviar.disabled = false; return; }
+    window.dispatchEvent(new CustomEvent("db-alterado", { detail: "chamados" }));
+  });
   document.getElementById("detalhe-atividade").textContent = c.atividade || "";
   renderizarSugestao(c);
 
@@ -606,10 +616,29 @@ document.getElementById("comentario-texto").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) document.getElementById("form-comentario").requestSubmit();
 });
 
-// Chamado aberto pelo portal do colaborador (sem login).
+// Selos: aberto pelo portal do colaborador e/ou ligado ao Qualitor.
 function seloPortal(c) {
-  if (c.origem !== "portal") return "";
-  return `<span class="selo-portal" title="Aberto pelo portal do colaborador">📨 Portal · ${escaparHTML((c.solicitanteNome || "").split(" ")[0])}</span>`;
+  let html = "";
+  if (c.origem === "portal") html += `<span class="selo-portal" title="Aberto pelo portal do colaborador">📨 Portal · ${escaparHTML((c.solicitanteNome || "").split(" ")[0])}</span>`;
+  html += seloQualitor(c);
+  return html;
+}
+function linkQualitor(c) {
+  const modelo = qualitorInfo && qualitorInfo.url_chamado;
+  if (!modelo || !/^https?:\/\//i.test(modelo)) return "";
+  return c.qualitorNumero ? modelo.replace(/\{\{\s*numero\s*\}\}/g, encodeURIComponent(c.qualitorNumero)) : "";
+}
+function seloQualitor(c) {
+  if (c.qualitorNumero) {
+    const link = linkQualitor(c);
+    const texto = `Q ${escaparHTML(c.qualitorNumero)}`;
+    return link
+      ? `<a class="selo-qualitor" href="${escaparHTML(link).replace(/"/g, "&quot;")}" target="_blank" rel="noopener noreferrer" title="Abrir no Qualitor${c.qualitorSituacao ? " · " + escaparHTML(c.qualitorSituacao) : ""}" onclick="event.stopPropagation()">${texto} ↗</a>`
+      : `<span class="selo-qualitor" title="Chamado no Qualitor${c.qualitorSituacao ? " · " + escaparHTML(c.qualitorSituacao) : ""}">${texto}</span>`;
+  }
+  if (c.qualitorSync === "pendente") return `<span class="selo-qualitor enviando" title="Sendo aberto no Qualitor">⏳ Enviando ao Qualitor</span>`;
+  if (c.qualitorSync === "erro") return `<span class="selo-qualitor falhou" title="${escaparHTML(c.qualitorErro || "")}">⚠ Não foi para o Qualitor</span>`;
+  return "";
 }
 
 // -------------------- Utilitários --------------------
