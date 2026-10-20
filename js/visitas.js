@@ -15,6 +15,7 @@ import { protegerPagina } from "./auth.js";
 import { montarNav } from "./nav.js";
 import { exportarCSV, nomeArquivoComData } from "./csv-utils.js";
 import { supabase, observar, inserir, atualizar, excluir, listarUsuarios } from "./db.js";
+import { ausentesNoDia, TIPOS_AGENDA } from "./agenda-util.js";
 
 let usuarioAtual = null;
 let perfilAtual = null;
@@ -50,6 +51,7 @@ protegerPagina(async (user, perfil) => {
   montarNav(perfil, user);
 
   listaUsuarios = await listarUsuarios();
+  montarSelectTecnicos();
 
   observarVisitas();
 });
@@ -64,6 +66,34 @@ function observarVisitas() {
   });
 }
 
+const ehAdmin = () => perfilAtual && perfilAtual.papel === "admin";
+const podeEditarVisita = (v) => ehAdmin() || v.criadoPorUid === usuarioAtual.uid || v.tecnicoUid === usuarioAtual.uid;
+const tecnicosDoTime = () => listaUsuarios.filter((u) => u.papel === "tecnico" || u.papel === "admin")
+  .sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
+
+function montarSelectTecnicos() {
+  const opcoes = tecnicosDoTime().map((u) => `<option value="${escaparHTML(u.id)}">${escaparHTML(u.nome)}</option>`).join("");
+  const sel = document.getElementById("visita-tecnico");
+  sel.innerHTML = `<option value="">— Sem técnico atribuído —</option>` + opcoes;
+  const filtro = document.getElementById("filtro-tecnico-visita");
+  filtro.innerHTML = `<option value="">Todos os técnicos</option><option value="__meus">Minhas visitas</option><option value="__sem">Sem técnico atribuído</option>` + opcoes;
+  document.getElementById("visita-tecnico-dica").hidden = ehAdmin();
+}
+
+// Marca no select quem está ausente (férias, folga...) no dia da visita.
+async function marcarAusentes() {
+  const dia = document.getElementById("visita-data").value;
+  const sel = document.getElementById("visita-tecnico");
+  let ausentes = new Map();
+  try { ausentes = dia ? await ausentesNoDia(dia) : new Map(); } catch (e) { /* agenda opcional */ }
+  [...sel.options].forEach((o) => {
+    if (!o.value) return;
+    const u = listaUsuarios.find((x) => x.id === o.value);
+    const tipo = ausentes.get(o.value);
+    o.textContent = (u ? u.nome : o.textContent) + (tipo ? ` — ausente (${(TIPOS_AGENDA[tipo] || {}).rotulo || tipo})` : "");
+  });
+}
+
 function obterListaFiltrada() {
   const busca = document.getElementById("filtro-busca-visita").value.trim().toLowerCase();
   const fStatus = document.getElementById("filtro-status-visita").value;
@@ -72,8 +102,12 @@ function obterListaFiltrada() {
   return listaVisitas.filter((v) => {
     if (fStatus && v.status !== fStatus) return false;
     if (fEmpresa && v.empresaResponsavel !== fEmpresa) return false;
+    const fTec = document.getElementById("filtro-tecnico-visita").value;
+    if (fTec === "__meus" && v.tecnicoUid !== usuarioAtual.uid) return false;
+    if (fTec === "__sem" && v.tecnicoUid) return false;
+    if (fTec && !fTec.startsWith("__") && v.tecnicoUid !== fTec) return false;
     if (busca) {
-      const alvo = `${v.cidade || ""} ${v.area || ""} ${v.recursoResponsavel || ""}`.toLowerCase();
+      const alvo = `${v.cidade || ""} ${v.area || ""} ${v.recursoResponsavel || ""} ${v.tecnicoNome || ""} ${v.titulo || ""}`.toLowerCase();
       if (!alvo.includes(busca)) return false;
     }
     return true;
@@ -89,7 +123,7 @@ function renderizarTabela() {
   }
 
   tabelaBody.innerHTML = filtradas.map((v) => {
-    const podeEditar = perfilAtual.papel === "admin" || v.criadoPorUid === usuarioAtual.uid;
+    const podeEditar = podeEditarVisita(v);
     const podeExcluir = perfilAtual.papel === "admin";
 
     let acoes = "";
@@ -107,7 +141,9 @@ function renderizarTabela() {
       <tr>
         <td>${escaparHTML(v.numero || "—")}</td>
         <td><strong>${escaparHTML(v.titulo)}</strong></td>
-        <td>${escaparHTML(v.recursoResponsavel)}</td>
+        <td>${escaparHTML(v.recursoResponsavel)}${v.tecnicoNome
+          ? `<br><span class="selo-tecnico-visita${v.tecnicoUid === usuarioAtual.uid ? " meu" : ""}" title="Técnico atribuído">👤 ${escaparHTML(v.tecnicoNome)}</span>`
+          : (ehAdmin() && v.status === "agendada" ? `<br><small class="texto-suave">sem técnico</small>` : "")}</td>
         <td>${escaparHTML(v.cidade || "—")}</td>
         <td>${formatarData(v.data)}</td>
         <td>${escaparHTML(v.area || "—")}</td>
@@ -139,7 +175,7 @@ async function abrirLaudo(caminho) {
   if (aba) aba.location.href = data.signedUrl; else window.location.href = data.signedUrl;
 }
 
-["filtro-status-visita", "filtro-empresa-visita"].forEach((id) => {
+["filtro-status-visita", "filtro-empresa-visita", "filtro-tecnico-visita"].forEach((id) => {
   document.getElementById(id).addEventListener("change", renderizarTabela);
 });
 document.getElementById("filtro-busca-visita").addEventListener("input", renderizarTabela);
@@ -150,7 +186,7 @@ document.getElementById("filtro-busca-visita").addEventListener("input", renderi
 document.getElementById("btn-exportar-visitas").addEventListener("click", () => {
   const cabecalhos = [
     "Número", "Título", "Recurso Responsável", "Cidade", "Data da Visita", "Área",
-    "Tipo de Atendimento", "Status", "Empresa Responsável", "Observações", "Link do Laudo", "Registrado por"
+    "Tipo de Atendimento", "Status", "Empresa Responsável", "Observações", "Link do Laudo", "Registrado por", "Técnico atribuído"
   ];
 
   const linhas = obterListaFiltrada().map((v) => [
@@ -165,7 +201,8 @@ document.getElementById("btn-exportar-visitas").addEventListener("click", () => 
     v.empresaResponsavel || "",
     v.observacoes || "",
     v.laudoPath ? `Storage: laudos/${v.laudoPath}` : (v.laudoUrl || ""),
-    v.criadoPorNome || ""
+    v.criadoPorNome || "",
+    v.tecnicoNome || ""
   ]);
 
   exportarCSV(nomeArquivoComData("visitas"), cabecalhos, linhas);
@@ -187,6 +224,8 @@ function abrirModal(modo, visitaId = null) {
   document.getElementById("visita-id").value = visitaId || "";
   laudoAtualEl.textContent = "";
   laudoAtualEl.dataset.temLaudo = "";
+  const selTec = document.getElementById("visita-tecnico");
+  selTec.disabled = !ehAdmin();
 
   if (modo === "criar") {
     document.getElementById("modal-visita-titulo").textContent = "Nova visita";
@@ -206,6 +245,10 @@ function abrirModal(modo, visitaId = null) {
     document.getElementById("visita-status").value = v.status || "agendada";
     document.getElementById("visita-empresa").value = v.empresaResponsavel || "Equipe Interna";
     document.getElementById("visita-observacoes").value = v.observacoes || "";
+    if (v.tecnicoUid && ![...selTec.options].some((o) => o.value === v.tecnicoUid)) {
+      selTec.insertAdjacentHTML("beforeend", `<option value="${escaparHTML(v.tecnicoUid)}">${escaparHTML(v.tecnicoNome || "Técnico")}</option>`);
+    }
+    selTec.value = v.tecnicoUid || "";
 
     if (v.laudoPath || v.laudoUrl) {
       laudoAtualEl.textContent = `Laudo já anexado: ${v.laudoNome || "arquivo"} (escolha outro arquivo acima só se quiser substituí-lo)`;
@@ -213,8 +256,16 @@ function abrirModal(modo, visitaId = null) {
     }
   }
 
+  marcarAusentes();
   modal.classList.add("aberto");
 }
+document.getElementById("visita-data").addEventListener("change", marcarAusentes);
+// Admin escolheu o técnico e o "Recurso" está vazio: preenche com o nome.
+document.getElementById("visita-tecnico").addEventListener("change", (e) => {
+  const u = listaUsuarios.find((x) => x.id === e.target.value);
+  const rec = document.getElementById("visita-recurso");
+  if (u && !rec.value.trim()) rec.value = u.nome;
+});
 
 function fecharModal() {
   modal.classList.remove("aberto");
@@ -237,6 +288,8 @@ form.addEventListener("submit", async (evento) => {
     empresaResponsavel: document.getElementById("visita-empresa").value,
     observacoes: document.getElementById("visita-observacoes").value.trim()
   };
+  // Só o admin manda o técnico (o banco também garante isso).
+  if (ehAdmin()) dados.tecnicoUid = document.getElementById("visita-tecnico").value || null;
 
   const arquivo = inputLaudo.files[0] || null;
   const jaTinhaLaudo = laudoAtualEl.dataset.temLaudo === "sim";
@@ -427,7 +480,7 @@ function abrirPeloEndereco() {
   if (!m) return;
   const v = listaVisitas.find((x) => x.id === decodeURIComponent(m[1]));
   if (!v) return;
-  if (perfilAtual.papel === "admin" || v.criadoPorUid === usuarioAtual.uid) {
+  if (podeEditarVisita(v)) {
     abrirModal("editar", v.id);
   } else {
     document.getElementById("filtro-busca-visita").value = v.titulo || "";

@@ -347,6 +347,10 @@ Passos:
 
 Observação: os nomes dos campos dos modelos XML vieram da documentação pública do WebService do Qualitor (WSTicket). Cada instalação pode ter campos obrigatórios ou códigos próprios, por isso eles ficam editáveis na tela.
 
+### Outubro/2026 — Visitas atribuídas a técnicos
+
+O admin escolhe o **Técnico atribuído** na visita. O técnico recebe aviso no sino, vê a visita destacada ("Minhas visitas" no filtro) e pode editá-la, marcar como realizada e anexar o laudo. Só o admin atribui ou troca o técnico (regra no banco). Rode o `supabase/schema.sql` inteiro depois do `git push`.
+
 ### Relatório de pendências das 18h
 
 Ele usa a mesma propriedade `SUPABASE_SERVICE_KEY` do backup diário. Se o backup ainda não foi ligado, siga o passo 1 de "Backup diário" antes.

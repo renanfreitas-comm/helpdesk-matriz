@@ -221,7 +221,14 @@ export function criarCliente(urlWs: string, fetchImpl: Fetch = fetch) {
     }
     const texto = await lerTexto(resp);
     const falha = tag(texto, "faultstring");
-    if (falha) throw new Error("Qualitor: " + desescXml(falha).trim());
+    if (falha) {
+      const f = desescXml(falha).trim();
+      if (/permission|permiss/i.test(f)) {
+        throw new Error(`Qualitor (${metodo}): ${f} — o servidor chegou ao Qualitor, mas esse usuário não tem permissão de usar o WebService` +
+          (metodo === "login" ? " (ou o código da empresa/IP de origem não é aceito). Peça à Vantix para liberar o acesso ao WebService para o usuário dos Secrets." : ` para "${metodo}". Peça à Vantix para liberar esse método.`));
+      }
+      throw new Error(`Qualitor (${metodo}): ${f}`);
+    }
     if (!resp.ok) throw new Error(`Qualitor respondeu HTTP ${resp.status}.`);
     const ret = tag(texto, "return");
     if (ret === null) throw new Error("Resposta inesperada do Qualitor (sem <return>).");

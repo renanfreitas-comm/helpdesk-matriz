@@ -27,6 +27,11 @@
         <option value="realizada">Realizada</option>
         <option value="cancelada">Cancelada</option>
       </select>
+      <select id="filtro-tecnico-visita">
+        <option value="">Todos os técnicos</option>
+        <option value="__meus">Minhas visitas</option>
+        <option value="__sem">Sem técnico atribuído</option>
+      </select>
       <select id="filtro-empresa-visita">
         <option value="">Todas as empresas</option>
         <option value="Equipe Interna">Equipe Interna</option>
@@ -41,7 +46,7 @@
           <tr>
             <th>Nº</th>
             <th>Título</th>
-            <th>Recurso Responsável</th>
+            <th>Recurso / Técnico</th>
             <th>Cidade</th>
             <th>Data da Visita</th>
             <th>Área</th>
@@ -87,6 +92,13 @@
             <label for="visita-cidade">Cidade</label>
             <input type="text" id="visita-cidade" placeholder="Ex: São Paulo" />
           </div>
+        </div>
+
+        <div class="campo">
+          <label for="visita-tecnico">Técnico atribuído <span class="texto-suave" id="visita-tecnico-dica">(só o admin atribui)</span></label>
+          <select id="visita-tecnico">
+            <option value="">— Sem técnico atribuído —</option>
+          </select>
         </div>
 
         <div class="linha-dupla">

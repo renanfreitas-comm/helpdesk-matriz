@@ -1502,3 +1502,7 @@ textarea.mono, .mono { font-family: ui-monospace, Consolas, monospace; font-size
 .integ-modo-acao { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; max-width: 420px; }
 .integ-confirma { font-size: 12.5px; align-items: flex-start; }
 @media (max-width: 700px) { .integ-modo-acao { align-items: stretch; } }
+
+/* Visitas — técnico atribuído */
+.selo-tecnico-visita { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 999px; background: #e0f2fe; color: #0369a1; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.selo-tecnico-visita.meu { background: #fef3c7; color: #92400e; }

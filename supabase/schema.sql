@@ -580,6 +580,35 @@ create table if not exists public.visitas (
 );
 create index if not exists visitas_data_idx on public.visitas (data desc);
 
+-- Técnico atribuído (só admin atribui). O técnico atribuído pode editar a
+-- visita, marcar como realizada e anexar o laudo.
+alter table public.visitas add column if not exists tecnico_uid uuid references public.usuarios (id) on delete set null;
+alter table public.visitas add column if not exists tecnico_nome text;
+create index if not exists visitas_tecnico_idx on public.visitas (tecnico_uid, data);
+
+create or replace function public.tg_visitas_tecnico()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and not public.eh_admin() then
+    -- Só o admin escolhe/troca o técnico.
+    if tg_op = 'INSERT' then new.tecnico_uid := null;
+    else new.tecnico_uid := old.tecnico_uid; end if;
+  end if;
+  if new.tecnico_uid is not null then
+    if not exists (select 1 from usuarios where id = new.tecnico_uid and papel in ('tecnico', 'admin')) then
+      raise exception 'Escolha um técnico do time (contas de Painel de TV não recebem visitas).' using errcode = '22023';
+    end if;
+    new.tecnico_nome := public.nome_usuario(new.tecnico_uid);
+    if coalesce(trim(new.recurso_responsavel), '') = '' then new.recurso_responsavel := new.tecnico_nome; end if;
+  else
+    new.tecnico_nome := null;
+  end if;
+  return new;
+end $$;
+drop trigger if exists visitas_tecnico on public.visitas;
+create trigger visitas_tecnico before insert or update on public.visitas
+  for each row execute function public.tg_visitas_tecnico();
+
 drop trigger if exists visitas_regras on public.visitas;
 create trigger visitas_regras before insert or update on public.visitas
   for each row execute function public.tg_autoria();
@@ -589,7 +618,7 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (
     select 1 from public.visitas v
     where v.id = p_id
-      and (v.criado_por_uid = auth.uid() or public.eh_admin())
+      and (v.criado_por_uid = auth.uid() or v.tecnico_uid = auth.uid() or public.eh_admin())
   );
 $$;
 
@@ -796,7 +825,7 @@ create policy visitas_ler on public.visitas for select to authenticated
 create policy visitas_criar on public.visitas for insert to authenticated
   with check ((select public.eh_membro()));
 create policy visitas_editar on public.visitas for update to authenticated
-  using ((select public.eh_membro()) and (criado_por_uid = auth.uid() or (select public.eh_admin())))
+  using ((select public.eh_membro()) and (criado_por_uid = auth.uid() or tecnico_uid = auth.uid() or (select public.eh_admin())))
   with check ((select public.eh_membro()));
 create policy visitas_excluir on public.visitas for delete to authenticated
   using ((select public.eh_admin()));
@@ -1144,6 +1173,20 @@ end $$;
 drop trigger if exists chamado_eventos_notificar on public.chamado_eventos;
 create trigger chamado_eventos_notificar after insert on public.chamado_eventos
   for each row execute function public.tg_notificar_comentario();
+
+-- Visita atribuída a um técnico → avisa no sino.
+create or replace function public.tg_notificar_visitas()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.tecnico_uid is null or new.tecnico_uid is not distinct from (case when tg_op = 'UPDATE' then old.tecnico_uid end) then return null; end if;
+  perform notificar(new.tecnico_uid, 'atribuicao', 'Visita atribuída a você: ' || new.titulo,
+    to_char(new.data, 'DD/MM/YYYY') || coalesce(nullif(' · ' || new.cidade, ' · '), '') || coalesce(nullif(' · ' || new.area, ' · '), ''),
+    'visitas.html#v=' || new.id);
+  return null;
+end $$;
+drop trigger if exists visitas_notificar on public.visitas;
+create trigger visitas_notificar after insert or update on public.visitas
+  for each row execute function public.tg_notificar_visitas();
 
 create or replace function public.tg_notificar_tarefas()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -1956,3 +1999,7 @@ begin
     end if;
   end loop;
 end $$;
+
+-- Faz a API do Supabase enxergar na hora as tabelas novas.
+notify pgrst, 'reload schema';
+select 'Help Desk Matriz: schema aplicado até o fim ✓' as resultado;
